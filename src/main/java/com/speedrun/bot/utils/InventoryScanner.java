@@ -33,16 +33,22 @@ public class InventoryScanner {
         return count;
     }
 
-    public static boolean hasWood() {
+    public static int countLogs() {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null)
-            return false;
+            return 0;
+        int count = 0;
         for (int i = 0; i < client.player.inventory.size(); i++) {
             ItemStack stack = client.player.inventory.getStack(i);
-            if (stack.getItem().isIn(ItemTags.LOGS))
-                return true;
+            if (stack.getItem().isIn(ItemTags.LOGS)) {
+                count += stack.getCount();
+            }
         }
-        return false;
+        return count;
+    }
+
+    public static boolean hasWood() {
+        return countLogs() > 0;
     }
 
     public static boolean hasPlanks() {

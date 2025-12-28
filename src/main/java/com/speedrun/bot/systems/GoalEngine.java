@@ -164,7 +164,7 @@ public class GoalEngine {
     }
 
     private static void updateState(MinecraftClient client) {
-        int logs = InventoryScanner.countItem(net.minecraft.item.Items.OAK_LOG); // Naive check
+        int logs = InventoryScanner.countLogs(); // Robust tag-based check
         boolean hasPlanks = InventoryScanner.hasPlanks();
         boolean hasTable = InventoryScanner.hasWorkbench();
         boolean hasWoodPick = InventoryScanner.hasPickaxe(); // Should check specific type

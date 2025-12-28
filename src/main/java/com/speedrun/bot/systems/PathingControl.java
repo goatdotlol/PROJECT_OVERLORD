@@ -7,7 +7,8 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * PathingControl - Orchestrates A* navigation and movement inputs.
+ * PathingControl - Orchestrates A* navigation with Human-like Camera and Smart
+ * Stopping.
  */
 public class PathingControl {
 
@@ -15,12 +16,33 @@ public class PathingControl {
     private static int pathIndex = 0;
     private static BlockPos finalDestination;
     private static final Random rng = new Random();
+    private static boolean isInteractionTarget = false;
 
     public static void setTarget(BlockPos pos) {
-        if (finalDestination != null && finalDestination.equals(pos) && currentPath != null)
+        // If it's the same target, don't reset unless path is done
+        if (finalDestination != null && finalDestination.equals(pos) && currentPath != null && !currentPath.isEmpty())
             return;
+
         finalDestination = pos;
         currentPath = null;
+        isInteractionTarget = true; // Assume any target set via this is for interaction
+    }
+
+    public static void wander(MinecraftClient client) {
+        if (finalDestination != null)
+            return;
+        double angle = rng.nextDouble() * 2 * Math.PI;
+        int x = (int) (Math.cos(angle) * 20);
+        int z = (int) (Math.sin(angle) * 20);
+        BlockPos wanderTarget = client.player.getBlockPos().add(x, 0, z);
+
+        // Only set if safe
+        currentPath = AStarPathfinder.compute(client.player.getBlockPos(), wanderTarget);
+        if (currentPath != null && !currentPath.isEmpty()) {
+            finalDestination = wanderTarget;
+            pathIndex = 0;
+            isInteractionTarget = false; // Wandering is just walking
+        }
     }
 
     public static List<BlockPos> getCurrentPath() {
@@ -46,28 +68,30 @@ public class PathingControl {
         // 2. Execution
         if (pathIndex < currentPath.size()) {
 
-            // Only stop if strictly breaking a block close by?
-            // Actually, for "Baritone" style, we can walk AND break.
-            // But let's keep it safe: if priority is HIGH (2), HumanoidControl will
-            // override look.
-            // We just ensure we don't STOP walking unless necessary.
-
-            /*
-             * Previous strict check:
-             * if (InteractionControl.isBusy()) {
-             * client.options.keyForward.setPressed(false);
-             * return;
-             * }
-             */
+            // --- SMART STOPPING ---
+            // If we are targeting a block to break (isInteractionTarget), stop early!
+            if (isInteractionTarget && pathIndex >= currentPath.size() - 2) { // Allow stopping 1-2 nodes early
+                double distToFinal = distance2d(client.player.getPos(), finalDestination);
+                if (distToFinal < 3.5) { // Interaction range
+                    stop(client);
+                    return;
+                }
+            }
 
             BlockPos nextNode = currentPath.get(pathIndex);
 
-            // Movement Inputs (Priority 1: Pathing)
-            HumanoidControl.lookAt(client, nextNode, 1);
-            client.options.keyForward.setPressed(true);
-            client.player.setSprinting(true); // Always sprint for speed
+            // --- SMOOTH CAMERA (Look Ahead) ---
+            // Look at a point further down the path for stability
+            int lookIndex = Math.min(pathIndex + 2, currentPath.size() - 1);
+            BlockPos lookTarget = currentPath.get(lookIndex);
 
-            // Robust jumping logic
+            // Priority 1: Navigation
+            HumanoidControl.lookAt(client, lookTarget, 1);
+
+            client.options.keyForward.setPressed(true);
+            client.player.setSprinting(true);
+
+            // Robust jumping
             if (nextNode.getY() > playerPos.getY() + 0.1 || client.player.horizontalCollision) {
                 client.options.keyJump.setPressed(true);
             } else {
@@ -75,21 +99,12 @@ public class PathingControl {
             }
 
             // Node Advancement
-            if (distance2d(client.player.getPos(), nextNode) < 0.7) {
+            if (distance2d(client.player.getPos(), nextNode) < 0.8) {
                 pathIndex++;
             }
         } else {
             stop(client);
         }
-    }
-
-    public static void wander(MinecraftClient client) {
-        if (finalDestination != null)
-            return;
-        double angle = rng.nextDouble() * 2 * Math.PI;
-        int x = (int) (Math.cos(angle) * 30);
-        int z = (int) (Math.sin(angle) * 30);
-        setTarget(client.player.getBlockPos().add(x, 0, z));
     }
 
     public static void stop(MinecraftClient client) {
