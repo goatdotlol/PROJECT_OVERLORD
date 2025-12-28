@@ -45,12 +45,20 @@ public class PathingControl {
 
         // 2. Execution
         if (pathIndex < currentPath.size()) {
-            // STOP if we are busy breaking blocks (Prevent spinning)
-            if (InteractionControl.isBusy()) {
-                client.options.keyForward.setPressed(false);
-                client.options.keyJump.setPressed(false);
-                return;
-            }
+
+            // Only stop if strictly breaking a block close by?
+            // Actually, for "Baritone" style, we can walk AND break.
+            // But let's keep it safe: if priority is HIGH (2), HumanoidControl will
+            // override look.
+            // We just ensure we don't STOP walking unless necessary.
+
+            /*
+             * Previous strict check:
+             * if (InteractionControl.isBusy()) {
+             * client.options.keyForward.setPressed(false);
+             * return;
+             * }
+             */
 
             BlockPos nextNode = currentPath.get(pathIndex);
 

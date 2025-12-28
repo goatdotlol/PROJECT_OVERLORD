@@ -3,7 +3,9 @@
     "package": "com.speedrun.bot.mixin",
     "compatibilityLevel": "JAVA_8",
     "client": [
-        "WorldRenderMixin"
+        "WorldRenderMixin",
+        "InGameHudMixin",
+        "SoundListenerMixin"
     ],
     "mixins": [],
     "injectors": {

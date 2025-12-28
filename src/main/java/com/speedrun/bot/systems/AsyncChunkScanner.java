@@ -24,6 +24,11 @@ public class AsyncChunkScanner {
     private static BlockPos nearestIron = null;
     private static BlockPos nearestStone = null;
     private static Entity nearestGolem = null;
+    private static Entity nearestItem = null;
+
+    public static Entity getNearestItem() {
+        return nearestItem;
+    }
 
     public static void tick(MinecraftClient client) {
         if (client.world == null || client.player == null)
@@ -107,7 +112,9 @@ public class AsyncChunkScanner {
 
     private static void scanEntities(MinecraftClient client) {
         nearestGolem = null;
+        nearestItem = null;
         double closestDist = Double.MAX_VALUE;
+        double closestItemDist = Double.MAX_VALUE;
 
         for (Entity e : client.world.getEntities()) {
             if (e instanceof IronGolemEntity) {
@@ -115,6 +122,13 @@ public class AsyncChunkScanner {
                 if (d < closestDist) {
                     closestDist = d;
                     nearestGolem = e;
+                }
+            } else if (e instanceof net.minecraft.entity.ItemEntity) {
+                // Check if it's reachable and a useful item (Log, etc)
+                double d = e.squaredDistanceTo(client.player);
+                if (d < closestItemDist) {
+                    closestItemDist = d;
+                    nearestItem = e;
                 }
             }
         }
@@ -211,6 +225,7 @@ public class AsyncChunkScanner {
         nearestLog = null;
         nearestIron = null;
         nearestStone = null;
+        nearestItem = null;
         scanIndexX = -SCAN_RADIUS_CHUNKS;
     }
 }

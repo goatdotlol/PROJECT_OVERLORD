@@ -3,6 +3,7 @@ package com.speedrun.bot.systems;
 import com.speedrun.bot.utils.InventoryScanner;
 import net.minecraft.block.Blocks;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.entity.Entity;
 import net.minecraft.util.math.BlockPos;
 
 /**
@@ -14,6 +15,7 @@ public class GoalEngine {
     public enum State {
         IDLE,
         GATHER_LOGS,
+        COLLECT_DROPS,
         CRAFT_PLANKS,
         CRAFT_STICKS,
         CRAFT_TABLE,
@@ -171,7 +173,13 @@ public class GoalEngine {
         // Strict Progression
         if (!hasWoodPick && !hasStonePick) {
             if (logs < 3 && !hasPlanks) {
-                currentState = State.GATHER_LOGS;
+                // If we have logs on ground nearby, pick them up!
+                if (AsyncChunkScanner.getNearestItem() != null
+                        && AsyncChunkScanner.getNearestItem().squaredDistanceTo(client.player) < 100) {
+                    currentState = State.COLLECT_DROPS;
+                } else {
+                    currentState = State.GATHER_LOGS;
+                }
             } else if (logs >= 1 && !hasPlanks) {
                 currentState = State.CRAFT_PLANKS;
             } else if (hasPlanks && !hasTable) {
