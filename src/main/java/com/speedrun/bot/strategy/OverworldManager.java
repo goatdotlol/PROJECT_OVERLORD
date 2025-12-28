@@ -73,11 +73,11 @@ public class OverworldManager {
         String biome = WorldScanner.getCurrentBiomeType(client);
         boolean isOcean = WorldScanner.isInOcean(client);
 
-        sendChat(client, "§a[Ghost] Starting scan... §7(Biome: " + biome + ")");
+        DebugLogger.log("[Ghost] Starting scan... (Biome: " + biome + ")");
 
         if (isOcean) {
             // In ocean - prioritize shipwrecks
-            sendChat(client, "§b[Ghost] Ocean detected! Prioritizing shipwrecks...");
+            DebugLogger.log("[Ghost] Ocean detected! Prioritizing shipwrecks...");
             transition(State.SCANNING_FOR_SHIPWRECK);
         } else {
             // On land - prioritize villages
@@ -89,30 +89,30 @@ public class OverworldManager {
         // Priority 1: Iron Golem (instant iron!)
         Entity golem = WorldScanner.findIronGolem(100);
         if (golem != null) {
-            foundTarget(client, golem, null, "IRON_GOLEM", "§6§lIRON GOLEM");
+            foundTarget(client, golem, null, "IRON_GOLEM", "IRON GOLEM");
             return;
         }
 
         // Priority 2: Villager (means village nearby)
         Entity villager = WorldScanner.findVillager(100);
         if (villager != null) {
-            foundTarget(client, villager, null, "VILLAGER", "§eVILLAGER");
+            foundTarget(client, villager, null, "VILLAGER", "VILLAGER");
             return;
         }
 
         // Priority 3: Village indicator blocks (Bell, Hay, etc.)
         WorldScanner.ScanResult village = WorldScanner.findVillageIndicator(80);
         if (village != null) {
-            foundTarget(client, null, village.blockPos, village.type, "§b" + village.type);
+            foundTarget(client, null, village.blockPos, village.type, village.type);
             return;
         }
 
         // Nothing found - check biome before moving on
         if (WorldScanner.isInOcean(client)) {
-            sendChat(client, "§7[EYES] In ocean - checking for shipwrecks...");
+            DebugLogger.log("[EYES] In ocean - checking for shipwrecks...");
             transition(State.SCANNING_FOR_SHIPWRECK);
         } else {
-            sendChat(client, "§7[EYES] No village nearby. Checking water for shipwrecks...");
+            DebugLogger.log("[EYES] No village nearby. Checking water for shipwrecks...");
             transition(State.SCANNING_FOR_SHIPWRECK);
         }
     }
@@ -121,12 +121,12 @@ public class OverworldManager {
         // Use smart shipwreck detection (not just chests!)
         WorldScanner.ScanResult shipwreck = WorldScanner.findShipwreckIndicator(60);
         if (shipwreck != null) {
-            foundTarget(client, null, shipwreck.blockPos, shipwreck.type, "§d" + shipwreck.type);
+            foundTarget(client, null, shipwreck.blockPos, shipwreck.type, shipwreck.type);
             return;
         }
 
         // Nothing found - move to cave scan
-        sendChat(client, "§7[EYES] No shipwreck structures. Scanning for iron ore...");
+        DebugLogger.log("[EYES] No shipwreck structures. Scanning for iron ore...");
         transition(State.SCANNING_FOR_CAVES);
     }
 
@@ -134,12 +134,12 @@ public class OverworldManager {
         // Look for iron ore
         BlockPos iron = WorldScanner.findIronOre(40);
         if (iron != null) {
-            foundTarget(client, null, iron, "IRON_ORE", "§fIRON ORE");
+            foundTarget(client, null, iron, "IRON_ORE", "IRON ORE");
             return;
         }
 
         // Nothing found anywhere - notify user
-        sendChat(client, "§c[EYES] Nothing found. Move around to scan new chunks!");
+        DebugLogger.log("[EYES] Nothing found. Move around to scan new chunks!");
         active = false; // Stop scanning to prevent spam
     }
 
@@ -165,16 +165,10 @@ public class OverworldManager {
         }
 
         DebugLogger.log("FOUND: " + type + " at (" + x + ", " + y + ", " + z + ")");
-        sendChat(client, "§a§l[EYES] §r" + displayName + " §fat §e(" + x + ", " + y + ", " + z + ") §7[" + distance
+        DebugLogger.log("[EYES] " + displayName + " at (" + x + ", " + y + ", " + z + ") [" + distance
                 + " blocks]");
 
         transition(State.TARGET_FOUND);
-    }
-
-    private static void sendChat(MinecraftClient client, String message) {
-        if (client.player != null) {
-            client.player.sendChatMessage(message);
-        }
     }
 
     public static void toggle() {
@@ -188,15 +182,11 @@ public class OverworldManager {
             targetPos = null;
             targetType = "";
             scanCooldown = 0;
-            if (client.player != null) {
-                client.player.sendChatMessage("§a[Ghost] 7 Sexy Iron: §lON");
-            }
+            DebugLogger.log("[Ghost] 7 Sexy Iron: ON");
         } else {
             DebugLogger.log("Strategy DISABLED.");
             currentState = State.IDLE;
-            if (client.player != null) {
-                client.player.sendChatMessage("§c[Ghost] 7 Sexy Iron: §lOFF");
-            }
+            DebugLogger.log("[Ghost] 7 Sexy Iron: OFF");
         }
     }
 

@@ -37,52 +37,46 @@ public class ConfigScreen extends Screen {
 
         // Button: Rescan Now
         scanButton = new ButtonWidget(centerX - 100, startY + 24, 200, 20,
-                new LiteralText("§b[SCAN NOW] Force Rescan"), (button) -> {
+                new LiteralText("[SCAN NOW] Force Rescan"), (button) -> {
                     if (!OverworldManager.isActive()) {
                         OverworldManager.toggle(); // Enable if not active
                     }
-                    this.client.player.sendChatMessage("§e[Ghost] Forcing rescan...");
+                    DebugLogger.log("[Ghost] Forcing rescan...");
                     this.client.openScreen(null);
                 });
         this.addButton(scanButton);
 
         // Button: Show Status
         this.addButton(new ButtonWidget(centerX - 100, startY + 48, 200, 20,
-                new LiteralText("§a[STATUS] Show Current Target"), (button) -> {
+                new LiteralText("[STATUS] Log Current Target"), (button) -> {
                     showStatus();
                 }));
 
         // Button: Nether Mode (Placeholder)
         netherButton = new ButtonWidget(centerX - 100, startY + 80, 200, 20,
-                new LiteralText("§7Nether Rush [NOT IMPLEMENTED]"), (button) -> {
-                    if (this.client.player != null) {
-                        this.client.player.sendChatMessage("§c[Ghost] Nether Rush not implemented yet!");
-                    }
+                new LiteralText("Nether Rush [NOT IMPLEMENTED]"), (button) -> {
+                    DebugLogger.log("[Ghost] Nether Rush not implemented yet!");
                 });
         this.addButton(netherButton);
 
         // Button: End Mode (Placeholder)
         endButton = new ButtonWidget(centerX - 100, startY + 104, 200, 20,
-                new LiteralText("§7End Game [NOT IMPLEMENTED]"), (button) -> {
-                    if (this.client.player != null) {
-                        this.client.player.sendChatMessage("§c[Ghost] End Game not implemented yet!");
-                    }
+                new LiteralText("End Game [NOT IMPLEMENTED]"), (button) -> {
+                    DebugLogger.log("[Ghost] End Game not implemented yet!");
                 });
         this.addButton(endButton);
 
         // Button: Toggle ESP
         this.addButton(new ButtonWidget(centerX - 100, startY + 128, 200, 20,
-                new LiteralText("§e[ESP] Toggle Target Highlight"), (button) -> {
+                new LiteralText("[ESP] Toggle Target Highlight"), (button) -> {
                     com.speedrun.bot.render.ESPRenderer.toggle();
                     boolean on = com.speedrun.bot.render.ESPRenderer.isEnabled();
-                    if (this.client.player != null) {
-                        this.client.player.sendChatMessage(on ? "§a[Ghost] ESP: ON" : "§c[Ghost] ESP: OFF");
-                    }
+                    DebugLogger.log(on ? "[Ghost] ESP: ON" : "[Ghost] ESP: OFF");
                 }));
 
         // Close
         this.addButton(new ButtonWidget(centerX - 100, this.height - 40, 200, 20,
-                new LiteralText("§f[X] Close"),
+                new LiteralText("[X] Close"),
                 (button) -> {
                     this.client.openScreen(null);
                 }));
@@ -91,9 +85,9 @@ public class ConfigScreen extends Screen {
     private LiteralText getOverworldButtonText() {
         boolean active = OverworldManager.isActive();
         if (active) {
-            return new LiteralText("§a§l7 Sexy Iron: ON §r[Click to STOP]");
+            return new LiteralText("7 Sexy Iron: ON [Click to STOP]");
         } else {
-            return new LiteralText("§c7 Sexy Iron: OFF §r[Click to START]");
+            return new LiteralText("7 Sexy Iron: OFF [Click to START]");
         }
     }
 
@@ -104,22 +98,22 @@ public class ConfigScreen extends Screen {
         String state = OverworldManager.getState().toString();
         String targetType = OverworldManager.getTargetType();
 
-        this.client.player.sendChatMessage("§e--- Ghost Status ---");
-        this.client.player.sendChatMessage("§7State: §f" + state);
-        this.client.player.sendChatMessage("§7Active: " + (OverworldManager.isActive() ? "§aYES" : "§cNO"));
+        DebugLogger.log("--- Ghost Status ---");
+        DebugLogger.log("State: " + state);
+        DebugLogger.log("Active: " + (OverworldManager.isActive() ? "YES" : "NO"));
 
         if (!targetType.isEmpty()) {
             if (OverworldManager.getTargetPos() != null) {
                 BlockPos pos = OverworldManager.getTargetPos();
-                this.client.player.sendChatMessage("§7Target: §6" + targetType + " §fat (" + pos.getX() + ", "
+                DebugLogger.log("Target: " + targetType + " at (" + pos.getX() + ", "
                         + pos.getY() + ", " + pos.getZ() + ")");
             } else if (OverworldManager.getTargetEntity() != null) {
                 Entity ent = OverworldManager.getTargetEntity();
-                this.client.player.sendChatMessage("§7Target: §6" + targetType + " §fat (" + (int) ent.getX() + ", "
+                DebugLogger.log("Target: " + targetType + " at (" + (int) ent.getX() + ", "
                         + (int) ent.getY() + ", " + (int) ent.getZ() + ")");
             }
         } else {
-            this.client.player.sendChatMessage("§7Target: §8None");
+            DebugLogger.log("Target: None");
         }
     }
 
@@ -128,11 +122,11 @@ public class ConfigScreen extends Screen {
         this.renderBackground(matrices);
 
         // Title
-        this.drawCenteredString(matrices, this.textRenderer, "§l§6Project OVERLORD", this.width / 2, 15, 0xFFFFFF);
-        this.drawCenteredString(matrices, this.textRenderer, "§7Ghost Engine v1.0", this.width / 2, 28, 0xAAAAAA);
+        this.drawCenteredString(matrices, this.textRenderer, "Project OVERLORD", this.width / 2, 15, 0xFFFFFF);
+        this.drawCenteredString(matrices, this.textRenderer, "Ghost Engine v1.0", this.width / 2, 28, 0xAAAAAA);
 
         // Instructions
-        this.drawCenteredString(matrices, this.textRenderer, "§8Press Right Shift to open this menu", this.width / 2,
+        this.drawCenteredString(matrices, this.textRenderer, "Press Right Shift to open this menu", this.width / 2,
                 this.height - 55, 0x888888);
 
         super.render(matrices, mouseX, mouseY, delta);
