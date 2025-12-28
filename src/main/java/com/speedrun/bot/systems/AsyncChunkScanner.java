@@ -21,6 +21,7 @@ public class AsyncChunkScanner {
 
     private static BlockPos nearestLog = null;
     private static BlockPos nearestIron = null;
+    private static BlockPos nearestStone = null;
     private static Entity nearestGolem = null;
 
     public static void tick(MinecraftClient client) {
@@ -28,6 +29,12 @@ public class AsyncChunkScanner {
             return;
 
         BlockPos playerPos = client.player.getBlockPos();
+
+        // Reset near caches for immediate re-scan
+        if (nearestLog != null && client.world.getBlockState(nearestLog).isAir())
+            nearestLog = null;
+        if (nearestStone != null && client.world.getBlockState(nearestStone).isAir())
+            nearestStone = null;
 
         // 1. FAST SCAN: 3x3 chunks every tick
         scanRegion(client, playerPos.getX() >> 4, playerPos.getZ() >> 4, 1);
@@ -84,6 +91,13 @@ public class AsyncChunkScanner {
                     } else if (block == Blocks.IRON_ORE) {
                         if (nearestIron == null || distSq < nearestIron.getSquaredDistance(playerPos))
                             nearestIron = pos;
+                    } else if (block == Blocks.STONE || block == Blocks.COBBLESTONE) {
+                        // Prioritize exposed stone
+                        boolean exposed = isExposed(chunk, x, y, z);
+                        if (exposed) {
+                            if (nearestStone == null || distSq < nearestStone.getSquaredDistance(playerPos))
+                                nearestStone = pos;
+                        }
                     }
                 }
             }
@@ -118,13 +132,50 @@ public class AsyncChunkScanner {
         return nearestIron;
     }
 
+    public static BlockPos getNearestStone() {
+        return nearestStone;
+    }
+
     public static Entity getNearestGolem() {
         return nearestGolem;
+    }
+
+    public static BlockPos findNearestTable(MinecraftClient client) {
+        if (client.world == null || client.player == null)
+            return null;
+        BlockPos playerPos = client.player.getBlockPos();
+        int cx = playerPos.getX() >> 4;
+        int cz = playerPos.getZ() >> 4;
+
+        BlockPos found = null;
+        double minDst = Double.MAX_VALUE;
+
+        for (int x = -1; x <= 1; x++) {
+            for (int z = -1; z <= 1; z++) {
+                WorldChunk chunk = client.world.getChunk(cx + x, cz + z);
+                // Scan chunk for table (Simplified: scan known surface Ys)
+                // In a real implementation, we'd cache this like ores.
+                // For now, let's scan a small radius around player instead of full chunk.
+            }
+        }
+        // Fallback: Local Scan
+        for (int x = -5; x <= 5; x++) {
+            for (int y = -2; y <= 2; y++) {
+                for (int z = -5; z <= 5; z++) {
+                    BlockPos pos = playerPos.add(x, y, z);
+                    if (client.world.getBlockState(pos).getBlock() == Blocks.CRAFTING_TABLE) {
+                        return pos;
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     public static void invalidateCache() {
         nearestLog = null;
         nearestIron = null;
+        nearestStone = null;
         scanIndexX = -SCAN_RADIUS_CHUNKS;
     }
 }

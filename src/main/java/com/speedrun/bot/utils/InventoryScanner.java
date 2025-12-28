@@ -13,13 +13,23 @@ public class InventoryScanner {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null)
             return 0;
+
         int count = 0;
+
+        // 1. Check Main Inventory
         for (int i = 0; i < client.player.inventory.size(); i++) {
             ItemStack stack = client.player.inventory.getStack(i);
             if (stack.getItem() == item) {
                 count += stack.getCount();
             }
         }
+
+        // 2. Check Cursor (What we are dragging)
+        ItemStack cursor = client.player.inventory.getCursorStack();
+        if (cursor.getItem() == item) {
+            count += cursor.getCount();
+        }
+
         return count;
     }
 

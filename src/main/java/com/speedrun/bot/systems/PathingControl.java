@@ -41,10 +41,17 @@ public class PathingControl {
 
         // 2. Execution
         if (pathIndex < currentPath.size()) {
+            // STOP if we are busy breaking blocks (Prevent spinning)
+            if (InteractionControl.isBusy()) {
+                client.options.keyForward.setPressed(false);
+                client.options.keyJump.setPressed(false);
+                return;
+            }
+
             BlockPos nextNode = currentPath.get(pathIndex);
 
-            // Movement Inputs
-            HumanoidControl.lookAt(client, nextNode);
+            // Movement Inputs (Priority 1: Pathing)
+            HumanoidControl.lookAt(client, nextNode, 1);
             client.options.keyForward.setPressed(true);
 
             // Robust jumping logic

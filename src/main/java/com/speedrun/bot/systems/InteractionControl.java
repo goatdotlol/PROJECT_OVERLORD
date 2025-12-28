@@ -22,8 +22,8 @@ public class InteractionControl {
         double distSq = client.player.getBlockPos().getSquaredDistance(breakTarget);
 
         if (distSq < 25.0) { // Within 5 blocks
-            // Precise Look
-            HumanoidControl.lookAt(client, breakTarget);
+            // Precise Look (Priority 2: Interaction Override)
+            HumanoidControl.lookAt(client, breakTarget, 2);
 
             // Start Attacking
             client.options.keyAttack.setPressed(true);
@@ -47,6 +47,23 @@ public class InteractionControl {
         if (client.options != null) {
             client.options.keyAttack.setPressed(false);
         }
+    }
+
+    public static void interactBlock(MinecraftClient client, BlockPos pos) {
+        if (client.player == null || client.world == null || client.interactionManager == null)
+            return;
+
+        // Look at it
+        HumanoidControl.lookAt(client, pos, 2);
+
+        // Right Click
+        // We need a hit result. Raycast or fake it.
+        // For 1.16.1 we can use interactionManager.interactBlock
+        // We need to construct a BlockHitResult.
+        Vec3d center = new Vec3d(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
+        BlockHitResult hit = new BlockHitResult(center, Direction.UP, pos, false);
+
+        client.interactionManager.interactBlock(client.player, client.world, Hand.MAIN_HAND, hit);
     }
 
     public static boolean isBusy() {

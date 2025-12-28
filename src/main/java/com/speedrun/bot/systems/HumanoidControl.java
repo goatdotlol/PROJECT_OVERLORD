@@ -13,10 +13,20 @@ public class HumanoidControl {
 
     private static float targetYaw;
     private static float targetPitch;
+    private static int currentPriority = 0; // 0=None, 1=Pathing, 2=Interaction
 
-    public static void lookAt(MinecraftClient client, BlockPos target) {
+    /**
+     * Set the look target with a priority level.
+     * 
+     * @param priority 1 for Walking, 2 for Interacting/Attacking
+     */
+    public static void lookAt(MinecraftClient client, BlockPos target, int priority) {
         if (client.player == null)
             return;
+        if (priority < currentPriority)
+            return; // Ignore lower priority requests
+
+        currentPriority = priority;
 
         Vec3d eyes = client.player.getCameraPosVec(1.0f);
         Vec3d dest = new Vec3d(target.getX() + 0.5, target.getY() + 0.5, target.getZ() + 0.5);
@@ -30,6 +40,9 @@ public class HumanoidControl {
     public static void tick(MinecraftClient client) {
         if (client.player == null)
             return;
+
+        // Reset priority for the next tick cycle
+        currentPriority = 0;
 
         float yawDiff = MathHelper.wrapDegrees(targetYaw - client.player.yaw);
         float pitchDiff = MathHelper.wrapDegrees(targetPitch - client.player.pitch);
