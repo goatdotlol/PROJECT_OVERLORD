@@ -81,7 +81,7 @@ public class AStarPathfinder {
                     if (canMoveTo(client, jumpPos) && isSolid(client, current.pos.add(x, 0, z))) { // Ensure we are
                                                                                                    // jumping onto
                                                                                                    // something
-                        addNode(open, closed, jumpPos, current, target, 1.2);
+                        addNode(open, closed, jumpPos, current, target, 2.0);
                     }
 
                     // 3. DROP (Step down)
