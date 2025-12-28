@@ -27,27 +27,26 @@ public class AutoSpeedrunManager {
     private static Entity currentTargetEntity = null;
     private static String currentTargetType = "";
 
+    private static int scanCooldown = 0;
+    private static final int SCAN_INTERVAL = 20; // Once per second
+
     public static void tick(MinecraftClient client) {
         if (!active || client.player == null)
             return;
 
-        // 1. Determine current goal based on inventory
-        updateGoal();
+        if (scanCooldown > 0) {
+            scanCooldown--;
+        } else {
+            scanCooldown = SCAN_INTERVAL;
+            // 1. Determine current goal based on inventory
+            updateGoal();
 
-        // 2. Execute goal logic
-        switch (currentGoal) {
-            case GET_WOOD:
-                executeGetWood(client);
-                break;
-            case GET_IRON:
-                executeGetIron(client);
-                break;
-            case GET_LAVA:
-                executeGetLava(client);
-                break;
-            default:
-                break;
+            // 2. Refresh target selection (heavy lifting)
+            refreshTarget(client);
         }
+
+        // 3. Constant logic (movement and interaction)
+        executeCurrentTarget(client);
     }
 
     private static void updateGoal() {
@@ -60,59 +59,58 @@ public class AutoSpeedrunManager {
         }
     }
 
-    private static void executeGetWood(MinecraftClient client) {
-        if (InteractionManager.isInteracting())
-            return;
-
-        BlockPos tree = WorldScanner.findTree(40);
-        if (tree != null) {
-            setTarget(tree, null, "WOOD_LOG");
-            double distSq = client.player.getBlockPos().getSquaredDistance(tree);
-
-            if (distSq < 4.0) {
-                // Close enough to break
-                InteractionManager.breakBlock(tree, 60); // approx 3 seconds for fist
-            }
-        } else {
-            DebugLogger.log("[Auto] No trees in range. Travel further!");
-            // Auto-travel logic could be added here
-        }
-    }
-
-    private static void executeGetIron(MinecraftClient client) {
-        // Priority: Golem > Village > Shipwreck > Iron Ore
-        Entity golem = WorldScanner.findIronGolem(80);
-        if (golem != null) {
-            setTarget(null, golem, "IRON_GOLEM");
-            // If close, we'd fight. MovementManager handles walking to it.
-            return;
-        }
-
-        WorldScanner.ScanResult village = WorldScanner.findVillage(80);
-        if (village != null) {
-            setTarget(village.blockPos, null, village.type);
-            return;
-        }
-
-        BlockPos iron = WorldScanner.findIronOre(40);
-        if (iron != null) {
-            setTarget(iron, null, "IRON_ORE");
-            double distSq = client.player.getBlockPos().getSquaredDistance(iron);
-            if (distSq < 4.0) {
-                // Check if we have pickaxe first!
-                if (InventoryScanner.hasPickaxe()) {
-                    InteractionManager.breakBlock(iron, 40);
-                } else {
-                    DebugLogger.log("[Auto] Need a pickaxe to mine iron!");
+    private static void refreshTarget(MinecraftClient client) {
+        switch (currentGoal) {
+            case GET_WOOD:
+                BlockPos tree = WorldScanner.findTree(40);
+                if (tree != null) {
+                    setTarget(tree, null, "WOOD_LOG");
                 }
-            }
+                break;
+            case GET_IRON:
+                Entity golem = WorldScanner.findIronGolem(80);
+                if (golem != null) {
+                    setTarget(null, golem, "IRON_GOLEM");
+                } else {
+                    WorldScanner.ScanResult village = WorldScanner.findVillage(80);
+                    if (village != null) {
+                        setTarget(village.blockPos, null, village.type);
+                    } else {
+                        BlockPos iron = WorldScanner.findIronOre(40);
+                        if (iron != null) {
+                            setTarget(iron, null, "IRON_ORE");
+                        }
+                    }
+                }
+                break;
+            case GET_LAVA:
+                BlockPos lava = WorldScanner.findLavaPool(100);
+                if (lava != null) {
+                    setTarget(lava, null, "LAVA_POOL");
+                }
+                break;
+            default:
+                break;
         }
     }
 
-    private static void executeGetLava(MinecraftClient client) {
-        BlockPos lava = WorldScanner.findLavaPool(100);
-        if (lava != null) {
-            setTarget(lava, null, "LAVA_POOL");
+    private static void executeCurrentTarget(MinecraftClient client) {
+        if (InteractionManager.isInteracting() || currentTargetPos == null && currentTargetEntity == null)
+            return;
+
+        BlockPos target = currentTargetPos;
+        if (currentTargetEntity != null)
+            target = currentTargetEntity.getBlockPos();
+
+        double distSq = client.player.getBlockPos().getSquaredDistance(target);
+
+        // If we are close enough to the target block, try to interact/break
+        if (distSq < 5.0) {
+            if (currentTargetType.equals("WOOD_LOG")) {
+                InteractionManager.breakBlock(target, 60);
+            } else if (currentTargetType.equals("IRON_ORE") && InventoryScanner.hasPickaxe()) {
+                InteractionManager.breakBlock(target, 40);
+            }
         }
     }
 
@@ -125,6 +123,7 @@ public class AutoSpeedrunManager {
     public static void start() {
         active = true;
         currentGoal = Goal.IDLE;
+        scanCooldown = 0;
         DebugLogger.log("[Auto] Autonomous Speedrun ENABLED.");
     }
 

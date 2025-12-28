@@ -3,17 +3,23 @@ package com.speedrun.bot.perception;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.block.Block;
 import net.minecraft.block.Blocks;
-import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.tag.BlockTags;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Comparator;
+import java.util.*;
 
+/**
+ * WorldScanner - Optimized with Caching and Radial Search.
+ * Fixes the severe lag by preventing 500k block loops every tick.
+ */
 public class WorldScanner {
+
+    // Cache for slow-changing targets
+    private static final Map<String, BlockPos> blockCache = new HashMap<>();
+    private static long lastCacheFlush = 0;
+    private static final long CACHE_EXPIRY = 2000; // 2 seconds
 
     // Village indicator blocks
     private static final Block[] VILLAGE_INDICATORS = {
@@ -31,81 +37,81 @@ public class WorldScanner {
             Blocks.JUNGLE_FENCE, Blocks.ACACIA_FENCE, Blocks.DARK_OAK_FENCE
     };
 
-    public static String getCurrentBiomeType(MinecraftClient client) {
-        if (client.player == null || client.world == null)
-            return "UNKNOWN";
-        Biome biome = client.world.getBiome(client.player.getBlockPos());
-        return biome.getCategory().getName().toUpperCase();
+    public static void clearCache() {
+        blockCache.clear();
     }
 
-    public static boolean isInOcean(MinecraftClient client) {
-        String biome = getCurrentBiomeType(client);
-        return biome.contains("OCEAN") || biome.contains("BEACH") || biome.contains("RIVER");
+    private static boolean isCacheValid(String key) {
+        if (System.currentTimeMillis() - lastCacheFlush > CACHE_EXPIRY) {
+            blockCache.clear();
+            lastCacheFlush = System.currentTimeMillis();
+            return false;
+        }
+        return blockCache.containsKey(key);
     }
 
     public static BlockPos findNearestBlock(Block targetBlock, int radius) {
+        String cacheKey = "BLOCK_" + targetBlock.getTranslationKey();
+        if (isCacheValid(cacheKey))
+            return blockCache.get(cacheKey);
+
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null || client.world == null)
             return null;
 
         BlockPos playerPos = client.player.getBlockPos();
-        BlockPos nearest = null;
-        double minDstSq = Double.MAX_VALUE;
+        // Radial search (outwards) is better but simple cube with early exit is usually
+        // enough if we limit Y
+        for (int r = 1; r <= radius; r++) {
+            for (int y = -10; y <= 10; y++) { // Limit Y range drastically
+                for (int x = -r; x <= r; x++) {
+                    for (int z = -r; z <= r; z++) {
+                        if (Math.abs(x) != r && Math.abs(z) != r)
+                            continue; // Only check the "shell"
 
-        for (int x = -radius; x <= radius; x++) {
-            for (int y = -radius; y <= radius; y++) {
-                for (int z = -radius; z <= radius; z++) {
-                    BlockPos pos = playerPos.add(x, y, z);
-                    if (client.world.getBlockState(pos).getBlock() == targetBlock) {
-                        double dstSq = pos.getSquaredDistance(playerPos);
-                        if (dstSq < minDstSq) {
-                            minDstSq = dstSq;
-                            nearest = pos;
+                        BlockPos pos = playerPos.add(x, y, z);
+                        if (client.world.getBlockState(pos).getBlock() == targetBlock) {
+                            blockCache.put(cacheKey, pos);
+                            return pos;
                         }
                     }
                 }
             }
         }
-        return nearest;
+        return null;
     }
 
-    /**
-     * Finds the nearest log (tree).
-     */
     public static BlockPos findTree(int radius) {
+        String cacheKey = "TREE";
+        if (isCacheValid(cacheKey))
+            return blockCache.get(cacheKey);
+
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null || client.world == null)
             return null;
 
         BlockPos playerPos = client.player.getBlockPos();
-        BlockPos nearest = null;
-        double minDstSq = Double.MAX_VALUE;
+        // Limit search for trees to surface-ish levels
+        for (int r = 1; r <= radius; r++) {
+            for (int y = -5; y <= 15; y++) {
+                for (int x = -r; x <= r; x++) {
+                    for (int z = -r; z <= r; z++) {
+                        if (Math.abs(x) != r && Math.abs(z) != r)
+                            continue;
 
-        for (int x = -radius; x <= radius; x++) {
-            for (int y = -radius; y <= radius; y++) {
-                for (int z = -radius; z <= radius; z++) {
-                    BlockPos pos = playerPos.add(x, y, z);
-                    if (client.world.getBlockState(pos).getBlock().isIn(BlockTags.LOGS)) {
-                        double dstSq = pos.getSquaredDistance(playerPos);
-                        if (dstSq < minDstSq) {
-                            minDstSq = dstSq;
-                            nearest = pos;
+                        BlockPos pos = playerPos.add(x, y, z);
+                        if (client.world.getBlockState(pos).getBlock().isIn(BlockTags.LOGS)) {
+                            blockCache.put(cacheKey, pos);
+                            return pos;
                         }
                     }
                 }
             }
         }
-        return nearest;
+        return null;
     }
 
-    /**
-     * Finds structure with verification.
-     */
     public static ScanResult findShipwreck(int radius) {
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client.player == null || client.world == null)
-            return null;
-
         for (Block indicator : SHIPWRECK_INDICATORS) {
             BlockPos found = findNearestBlock(indicator, radius);
             if (found != null && found.getY() < 64) {
@@ -115,9 +121,6 @@ public class WorldScanner {
         return null;
     }
 
-    /**
-     * Finds village with verification.
-     */
     public static ScanResult findVillage(int radius) {
         BlockPos bell = findNearestBlock(Blocks.BELL, radius);
         if (bell != null)
@@ -125,7 +128,7 @@ public class WorldScanner {
 
         for (Block indicator : VILLAGE_INDICATORS) {
             BlockPos found = findNearestBlock(indicator, radius);
-            if (found != null && !isInOcean(MinecraftClient.getInstance())) {
+            if (found != null) {
                 return new ScanResult("VILLAGE_PIECE", found, null);
             }
         }
@@ -133,20 +136,28 @@ public class WorldScanner {
     }
 
     public static BlockPos findLavaPool(int radius) {
+        String cacheKey = "LAVA";
+        if (isCacheValid(cacheKey))
+            return blockCache.get(cacheKey);
+
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null || client.world == null)
             return null;
 
         BlockPos playerPos = client.player.getBlockPos();
-        for (int x = -radius; x <= radius; x++) {
-            for (int z = -radius; z <= radius; z++) {
-                for (int y = -10; y <= 20; y++) {
-                    BlockPos pos = playerPos.add(x, y, z);
-                    Block block = client.world.getBlockState(pos).getBlock();
-                    if (block == Blocks.LAVA) {
-                        if (client.world.getBlockState(pos.east()).getBlock() == Blocks.LAVA ||
-                                client.world.getBlockState(pos.west()).getBlock() == Blocks.LAVA) {
-                            return pos;
+        for (int r = 1; r <= radius; r++) {
+            for (int y = -10; y <= 10; y++) {
+                for (int x = -r; x <= r; x++) {
+                    for (int z = -r; z <= r; z++) {
+                        if (Math.abs(x) != r && Math.abs(z) != r)
+                            continue;
+
+                        BlockPos pos = playerPos.add(x, y, z);
+                        if (client.world.getBlockState(pos).getBlock() == Blocks.LAVA) {
+                            if (client.world.getBlockState(pos.east()).getBlock() == Blocks.LAVA) {
+                                blockCache.put(cacheKey, pos);
+                                return pos;
+                            }
                         }
                     }
                 }
@@ -172,11 +183,6 @@ public class WorldScanner {
     public static Entity findIronGolem(double radius) {
         List<Entity> golems = getNearbyEntities(EntityType.IRON_GOLEM, radius);
         return golems.isEmpty() ? null : golems.get(0);
-    }
-
-    public static Entity findVillager(double radius) {
-        List<Entity> villagers = getNearbyEntities(EntityType.VILLAGER, radius);
-        return villagers.isEmpty() ? null : villagers.get(0);
     }
 
     public static BlockPos findIronOre(int radius) {

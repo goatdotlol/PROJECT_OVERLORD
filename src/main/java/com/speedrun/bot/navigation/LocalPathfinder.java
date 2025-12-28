@@ -1,6 +1,5 @@
 package com.speedrun.bot.navigation;
 
-import com.speedrun.bot.utils.DebugLogger;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
@@ -11,8 +10,8 @@ public class LocalPathfinder {
     private static class Node {
         BlockPos pos;
         Node parent;
-        double gCost; // District from start
-        double hCost; // Distance to end
+        double gCost;
+        double hCost;
 
         public Node(BlockPos pos, Node parent, double gCost, double hCost) {
             this.pos = pos;
@@ -27,56 +26,64 @@ public class LocalPathfinder {
     }
 
     public static List<BlockPos> findPath(BlockPos start, BlockPos end) {
-        // Simple A* Search
-        // Limit: 1000 nodes to prevent lag
+        if (start.getSquaredDistance(end) > 100 * 100)
+            return null; // Too far
 
         PriorityQueue<Node> openSet = new PriorityQueue<>(Comparator.comparingDouble(Node::fCost));
         Set<BlockPos> closedSet = new HashSet<>();
-        Map<BlockPos, Node> nodeMap = new HashMap<>(); // optimization to check if in openSet
+        Map<BlockPos, Node> nodeMap = new HashMap<>();
 
-        Node startNode = new Node(start, null, 0, start.getManhattanDistance(end));
-        openSet.add(startNode);
-        nodeMap.put(start, startNode);
+        openSet.add(new Node(start, null, 0, getHeuristic(start, end)));
+        nodeMap.put(start, openSet.peek());
 
         int iterations = 0;
         MinecraftClient client = MinecraftClient.getInstance();
 
-        while (!openSet.isEmpty() && iterations < 1000) {
+        while (!openSet.isEmpty() && iterations < 800) { // Reduced limit for better FPS
             iterations++;
             Node current = openSet.poll();
 
-            if (current.pos.equals(end) || current.pos.getSquaredDistance(end) <= 2.25) {
+            if (current.pos.getSquaredDistance(end) <= 2.25) {
                 return retracePath(current);
             }
 
             closedSet.add(current.pos);
 
             for (Direction dir : Direction.values()) {
-                // Simplified: Only strict horizontal/vertical. No diagonals.
                 if (dir == Direction.UP || dir == Direction.DOWN)
-                    continue; // Handle Y separately?
-                // Actually basic walking includes Y changes (step up/down)
+                    continue;
 
                 BlockPos neighborPos = current.pos.offset(dir);
 
+                // Handle Step Up/Down (1 block)
+                if (!isWalkable(neighborPos, client)) {
+                    if (isWalkable(neighborPos.up(), client)) {
+                        neighborPos = neighborPos.up();
+                    } else if (isWalkable(neighborPos.down(), client)) {
+                        neighborPos = neighborPos.down();
+                    } else {
+                        continue;
+                    }
+                }
+
                 if (closedSet.contains(neighborPos))
                     continue;
-                if (!isWalkable(neighborPos, client))
-                    continue;
 
-                double newCost = current.gCost + 1; // dist is 1
+                double newCost = current.gCost + 1;
                 Node neighbor = nodeMap.get(neighborPos);
 
                 if (neighbor == null || newCost < neighbor.gCost) {
-                    Node n = new Node(neighborPos, current, newCost, neighborPos.getManhattanDistance(end));
+                    Node n = new Node(neighborPos, current, newCost, getHeuristic(neighborPos, end));
                     nodeMap.put(neighborPos, n);
                     openSet.add(n);
                 }
             }
         }
+        return null;
+    }
 
-        DebugLogger.log("Pathfinder: No path found or timed out.");
-        return null; // No path
+    private static double getHeuristic(BlockPos a, BlockPos b) {
+        return Math.sqrt(a.getSquaredDistance(b));
     }
 
     private static List<BlockPos> retracePath(Node node) {
@@ -93,10 +100,6 @@ public class LocalPathfinder {
     private static boolean isWalkable(BlockPos pos, MinecraftClient client) {
         if (client.world == null)
             return false;
-        // Simplified Walkability:
-        // 1. Block at pos is AIR (or passable)
-        // 2. Block above pos is AIR
-        // 3. Block below pos is SOLID
         return !client.world.getBlockState(pos).getMaterial().isSolid() &&
                 !client.world.getBlockState(pos.up()).getMaterial().isSolid() &&
                 client.world.getBlockState(pos.down()).getMaterial().isSolid();
