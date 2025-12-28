@@ -5,6 +5,9 @@ import net.minecraft.block.Blocks;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.Entity;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.client.gui.screen.ingame.CraftingScreen;
 
 /**
@@ -115,31 +118,39 @@ public class GoalEngine {
 
                 if (targetPlace == null) {
                     status = "No valid spot to place table!";
-                    tablePos = client.player.getBlockPos(); // Desperate fail-safe
+                    tablePos = client.player.getBlockPos(); // Desperate fail-safe to stop loop
                     return;
                 }
 
-                PathingControl.stop(client); // Stop moving to place
-                HumanoidControl.lookAt(client, targetPlace, 2);
+                PathingControl.stop(client);
 
-                // Relaxed Pitch Check (45 degrees is enough to hit the block)
-                double lookError = Math.abs(client.player.pitch - 90);
-                // Just swing if we are looking somewhat down or at the block
-                if (true) { // removed strict check, just spam it if we are close
+                // FIX: Look at the GROUND block, not the air block
+                BlockPos groundBlock = targetPlace.down();
+                HumanoidControl.lookAt(client, groundBlock, 2);
+
+                if (true) {
                     int tableSlot = findSlot(client, net.minecraft.item.Items.CRAFTING_TABLE);
                     if (tableSlot != -1) {
                         client.player.inventory.selectedSlot = tableSlot;
-                        // Force Look at center
-                        HumanoidControl.lookAt(client, targetPlace, 2);
 
-                        // Interact
-                        client.interactionManager.interactItem(client.player, client.world,
-                                net.minecraft.util.Hand.MAIN_HAND);
+                        // FIX: Use interactBlock on the ground block with Direction UP
+                        // This actually places the block
+                        BlockHitResult hitResult = new BlockHitResult(
+                                new Vec3d(groundBlock.getX() + 0.5, groundBlock.getY() + 1.0, groundBlock.getZ() + 0.5),
+                                Direction.UP,
+                                groundBlock,
+                                false);
+
+                        client.interactionManager.interactBlock(client.player, client.world,
+                                net.minecraft.util.Hand.MAIN_HAND, hitResult);
                         client.player.swingHand(net.minecraft.util.Hand.MAIN_HAND);
 
-                        // Assume success for speed
+                        // Assume success
                         tablePos = targetPlace;
-                        currentState = State.CRAFT_WOOD_PICK; // Move on immediately
+                        // Don't force state. UpdateState will handle it next tick.
+                        // But we set lastInteractionTime to prevent spam
+                        lastInteractionTime = System.currentTimeMillis() + 500;
+                        currentState = State.IDLE;
                     }
                 }
                 break;
