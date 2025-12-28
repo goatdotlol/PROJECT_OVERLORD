@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "ghost-runner",
+  "version": "${version}",
+  "name": "Ghost Runner",
+  "description": "Project OVERLORD: 1.16.1 Internal Speedrun Macro",
+  "authors": [
+    "Goat"
+  ],
+  "contact": {
+    "homepage": "https://fabricmc.net/",
+    "sources": "https://github.com/FabricMC/fabric-example-mod"
+  },
+  "license": "CC0-1.0",
+  "environment": "*",
+  "entrypoints": {
+    "client": [
+      "com.speedrun.bot.BotMain"
+    ]
+  },
+  "mixins": [
+    "ghost-runner.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.14.21",
+    "minecraft": "~1.16.1",
+    "java": ">=8"
+  }
+}
