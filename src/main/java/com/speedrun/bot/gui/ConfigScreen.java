@@ -68,6 +68,16 @@ public class ConfigScreen extends Screen {
                 });
         this.addButton(endButton);
 
+        // Button: Toggle ESP
+        this.addButton(new ButtonWidget(centerX - 100, startY + 128, 200, 20,
+                new LiteralText("§e[ESP] Toggle Target Highlight"), (button) -> {
+                    com.speedrun.bot.render.ESPRenderer.toggle();
+                    boolean on = com.speedrun.bot.render.ESPRenderer.isEnabled();
+                    if (this.client.player != null) {
+                        this.client.player.sendChatMessage(on ? "§a[Ghost] ESP: ON" : "§c[Ghost] ESP: OFF");
+                    }
+                }));
+
         // Close
         this.addButton(new ButtonWidget(centerX - 100, this.height - 40, 200, 20,
                 new LiteralText("§f[X] Close"),

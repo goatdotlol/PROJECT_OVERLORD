@@ -2,6 +2,9 @@
     "required": true,
     "package": "com.speedrun.bot.mixin",
     "compatibilityLevel": "JAVA_8",
+    "client": [
+        "WorldRenderMixin"
+    ],
     "mixins": [],
     "injectors": {
         "defaultRequire": 1

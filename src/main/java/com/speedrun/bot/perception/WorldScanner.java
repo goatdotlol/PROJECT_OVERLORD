@@ -7,6 +7,7 @@ import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.biome.Biome;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Comparator;
@@ -31,9 +32,67 @@ public class WorldScanner {
             Blocks.LOOM
     };
 
+    // Shipwreck indicator blocks - waterlogged wood structures underwater
+    private static final Block[] SHIPWRECK_INDICATORS = {
+            // Trapdoors (all wood types used in shipwrecks)
+            Blocks.OAK_TRAPDOOR,
+            Blocks.SPRUCE_TRAPDOOR,
+            Blocks.BIRCH_TRAPDOOR,
+            Blocks.JUNGLE_TRAPDOOR,
+            Blocks.ACACIA_TRAPDOOR,
+            Blocks.DARK_OAK_TRAPDOOR,
+            // Fences (ship railings)
+            Blocks.OAK_FENCE,
+            Blocks.SPRUCE_FENCE,
+            Blocks.BIRCH_FENCE,
+            Blocks.JUNGLE_FENCE,
+            Blocks.ACACIA_FENCE,
+            Blocks.DARK_OAK_FENCE,
+            // Logs (ship hull)
+            Blocks.OAK_LOG,
+            Blocks.SPRUCE_LOG,
+            Blocks.STRIPPED_OAK_LOG,
+            Blocks.STRIPPED_SPRUCE_LOG,
+            // Planks (ship deck)
+            Blocks.OAK_PLANKS,
+            Blocks.SPRUCE_PLANKS,
+            Blocks.DARK_OAK_PLANKS
+    };
+
+    /**
+     * Gets current biome category for smart scanning.
+     */
+    public static String getCurrentBiomeType(MinecraftClient client) {
+        if (client.player == null || client.world == null)
+            return "UNKNOWN";
+
+        BlockPos pos = client.player.getBlockPos();
+        Biome biome = client.world.getBiome(pos);
+        Biome.Category category = biome.getCategory();
+
+        return category.getName().toUpperCase();
+    }
+
+    /**
+     * Check if player is in/near ocean.
+     */
+    public static boolean isInOcean(MinecraftClient client) {
+        String biome = getCurrentBiomeType(client);
+        return biome.contains("OCEAN") || biome.contains("BEACH") || biome.contains("RIVER");
+    }
+
+    /**
+     * Check if player is in plains/forest (village territory).
+     */
+    public static boolean isInVillageTerritory(MinecraftClient client) {
+        String biome = getCurrentBiomeType(client);
+        return biome.contains("PLAINS") || biome.contains("SAVANNA") ||
+                biome.contains("DESERT") || biome.contains("TAIGA") ||
+                biome.contains("SNOWY");
+    }
+
     /**
      * Scans for a specific block within a radius.
-     * Uses a cubic search centered on the player.
      */
     public static BlockPos findNearestBlock(Block targetBlock, int radius) {
         MinecraftClient client = MinecraftClient.getInstance();
@@ -63,27 +122,56 @@ public class WorldScanner {
 
     /**
      * Scans for ANY village indicator blocks.
-     * Returns the type of block found and its position.
      */
     public static ScanResult findVillageIndicator(int radius) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null || client.world == null)
             return null;
 
-        BlockPos playerPos = client.player.getBlockPos();
-
         // Priority: Bell first (most reliable)
         BlockPos bell = findNearestBlock(Blocks.BELL, radius);
         if (bell != null) {
-            return new ScanResult("BELL", bell, null);
+            return new ScanResult("BELL (Village!)", bell, null);
         }
 
         // Then check for any village workstation
         for (Block indicator : VILLAGE_INDICATORS) {
             BlockPos found = findNearestBlock(indicator, radius);
             if (found != null) {
-                return new ScanResult(indicator.getName().getString().toUpperCase(), found, null);
+                String name = indicator.toString().replace("Block{", "").replace("}", "").toUpperCase();
+                return new ScanResult(name + " (Village)", found, null);
             }
+        }
+
+        return null;
+    }
+
+    /**
+     * Scans for shipwreck indicators (underwater wood structures).
+     * More reliable than just finding chests!
+     */
+    public static ScanResult findShipwreckIndicator(int radius) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.player == null || client.world == null)
+            return null;
+
+        // Look for underwater wood structures (trapdoors, fences are most unique)
+        for (Block indicator : SHIPWRECK_INDICATORS) {
+            BlockPos found = findNearestBlock(indicator, radius);
+            if (found != null) {
+                // Verify it's underwater (shipwrecks are always underwater)
+                BlockState aboveState = client.world.getBlockState(found.up());
+                if (aboveState.getBlock() == Blocks.WATER || found.getY() < 62) {
+                    String name = indicator.toString().replace("Block{", "").replace("}", "").toUpperCase();
+                    return new ScanResult(name + " (Shipwreck?)", found, null);
+                }
+            }
+        }
+
+        // Fallback: chest underwater
+        BlockPos chest = findNearestBlock(Blocks.CHEST, radius);
+        if (chest != null && chest.getY() < 62) {
+            return new ScanResult("CHEST (Underwater)", chest, null);
         }
 
         return null;

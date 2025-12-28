@@ -42,9 +42,7 @@ public class OverworldManager {
 
         switch (currentState) {
             case IDLE:
-                DebugLogger.log("OverworldManager: Starting '7 Sexy Iron' Strategy");
-                sendChat(client, "§a[Ghost] Starting scan for resources...");
-                transition(State.SCANNING_FOR_VILLAGE);
+                startScanning(client);
                 break;
 
             case SCANNING_FOR_VILLAGE:
@@ -68,70 +66,67 @@ public class OverworldManager {
         }
     }
 
+    private static void startScanning(MinecraftClient client) {
+        DebugLogger.log("OverworldManager: Starting '7 Sexy Iron' Strategy");
+
+        // Check biome to determine priority
+        String biome = WorldScanner.getCurrentBiomeType(client);
+        boolean isOcean = WorldScanner.isInOcean(client);
+
+        sendChat(client, "§a[Ghost] Starting scan... §7(Biome: " + biome + ")");
+
+        if (isOcean) {
+            // In ocean - prioritize shipwrecks
+            sendChat(client, "§b[Ghost] Ocean detected! Prioritizing shipwrecks...");
+            transition(State.SCANNING_FOR_SHIPWRECK);
+        } else {
+            // On land - prioritize villages
+            transition(State.SCANNING_FOR_VILLAGE);
+        }
+    }
+
     private static void scanForVillage(MinecraftClient client) {
         // Priority 1: Iron Golem (instant iron!)
         Entity golem = WorldScanner.findIronGolem(100);
         if (golem != null) {
-            targetEntity = golem;
-            targetType = "IRON_GOLEM";
-            int x = (int) golem.getX();
-            int y = (int) golem.getY();
-            int z = (int) golem.getZ();
-            DebugLogger.log("FOUND: Iron Golem at (" + x + ", " + y + ", " + z + ")");
-            sendChat(client, "§a§l[EYES] §r§6IRON GOLEM §fat (" + x + ", " + y + ", " + z + ") §7- Distance: "
-                    + (int) Math.sqrt(golem.squaredDistanceTo(client.player)) + " blocks");
-            transition(State.TARGET_FOUND);
+            foundTarget(client, golem, null, "IRON_GOLEM", "§6§lIRON GOLEM");
             return;
         }
 
         // Priority 2: Villager (means village nearby)
         Entity villager = WorldScanner.findVillager(100);
         if (villager != null) {
-            targetEntity = villager;
-            targetType = "VILLAGER";
-            int x = (int) villager.getX();
-            int y = (int) villager.getY();
-            int z = (int) villager.getZ();
-            DebugLogger.log("FOUND: Villager at (" + x + ", " + y + ", " + z + ")");
-            sendChat(client, "§a§l[EYES] §r§eVILLAGER §fat (" + x + ", " + y + ", " + z + ") §7- Village nearby!");
-            transition(State.TARGET_FOUND);
+            foundTarget(client, villager, null, "VILLAGER", "§eVILLAGER");
             return;
         }
 
         // Priority 3: Village indicator blocks (Bell, Hay, etc.)
         WorldScanner.ScanResult village = WorldScanner.findVillageIndicator(80);
         if (village != null) {
-            targetPos = village.blockPos;
-            targetType = village.type;
-            DebugLogger.log("FOUND: " + village.type + " at " + village.getCoords());
-            sendChat(client,
-                    "§a§l[EYES] §r§b" + village.type + " §fat " + village.getCoords() + " §7- Village indicator!");
-            transition(State.TARGET_FOUND);
+            foundTarget(client, null, village.blockPos, village.type, "§b" + village.type);
             return;
         }
 
-        // Nothing found - move to shipwreck scan
-        DebugLogger.log("Scan: No village found. Checking for shipwrecks...");
-        sendChat(client, "§7[EYES] No village nearby. Scanning for shipwrecks...");
-        transition(State.SCANNING_FOR_SHIPWRECK);
+        // Nothing found - check biome before moving on
+        if (WorldScanner.isInOcean(client)) {
+            sendChat(client, "§7[EYES] In ocean - checking for shipwrecks...");
+            transition(State.SCANNING_FOR_SHIPWRECK);
+        } else {
+            sendChat(client, "§7[EYES] No village nearby. Checking water for shipwrecks...");
+            transition(State.SCANNING_FOR_SHIPWRECK);
+        }
     }
 
     private static void scanForShipwreck(MinecraftClient client) {
-        // Look for chests
-        BlockPos chest = WorldScanner.findChest(60);
-        if (chest != null) {
-            targetPos = chest;
-            targetType = "CHEST";
-            DebugLogger.log("FOUND: Chest at (" + chest.getX() + ", " + chest.getY() + ", " + chest.getZ() + ")");
-            sendChat(client,
-                    "§a§l[EYES] §r§dCHEST §fat (" + chest.getX() + ", " + chest.getY() + ", " + chest.getZ() + ")");
-            transition(State.TARGET_FOUND);
+        // Use smart shipwreck detection (not just chests!)
+        WorldScanner.ScanResult shipwreck = WorldScanner.findShipwreckIndicator(60);
+        if (shipwreck != null) {
+            foundTarget(client, null, shipwreck.blockPos, shipwreck.type, "§d" + shipwreck.type);
             return;
         }
 
         // Nothing found - move to cave scan
-        DebugLogger.log("Scan: No chests found. Checking for iron ore...");
-        sendChat(client, "§7[EYES] No chests nearby. Scanning for iron ore...");
+        sendChat(client, "§7[EYES] No shipwreck structures. Scanning for iron ore...");
         transition(State.SCANNING_FOR_CAVES);
     }
 
@@ -139,19 +134,41 @@ public class OverworldManager {
         // Look for iron ore
         BlockPos iron = WorldScanner.findIronOre(40);
         if (iron != null) {
-            targetPos = iron;
-            targetType = "IRON_ORE";
-            DebugLogger.log("FOUND: Iron Ore at (" + iron.getX() + ", " + iron.getY() + ", " + iron.getZ() + ")");
-            sendChat(client,
-                    "§a§l[EYES] §r§fIRON ORE §fat (" + iron.getX() + ", " + iron.getY() + ", " + iron.getZ() + ")");
-            transition(State.TARGET_FOUND);
+            foundTarget(client, null, iron, "IRON_ORE", "§fIRON ORE");
             return;
         }
 
         // Nothing found anywhere - notify user
-        DebugLogger.log("Scan: Nothing found. Waiting for player to move...");
-        sendChat(client, "§c[EYES] Nothing found nearby. Walk around to scan new areas.");
+        sendChat(client, "§c[EYES] Nothing found. Move around to scan new chunks!");
         active = false; // Stop scanning to prevent spam
+    }
+
+    private static void foundTarget(MinecraftClient client, Entity entity, BlockPos pos, String type,
+            String displayName) {
+        targetEntity = entity;
+        targetPos = pos;
+        targetType = type;
+
+        int x, y, z;
+        int distance;
+
+        if (entity != null) {
+            x = (int) entity.getX();
+            y = (int) entity.getY();
+            z = (int) entity.getZ();
+            distance = (int) Math.sqrt(entity.squaredDistanceTo(client.player));
+        } else {
+            x = pos.getX();
+            y = pos.getY();
+            z = pos.getZ();
+            distance = (int) Math.sqrt(pos.getSquaredDistance(client.player.getBlockPos()));
+        }
+
+        DebugLogger.log("FOUND: " + type + " at (" + x + ", " + y + ", " + z + ")");
+        sendChat(client, "§a§l[EYES] §r" + displayName + " §fat §e(" + x + ", " + y + ", " + z + ") §7[" + distance
+                + " blocks]");
+
+        transition(State.TARGET_FOUND);
     }
 
     private static void sendChat(MinecraftClient client, String message) {
@@ -172,7 +189,7 @@ public class OverworldManager {
             targetType = "";
             scanCooldown = 0;
             if (client.player != null) {
-                client.player.sendChatMessage("§a[Ghost] 7 Sexy Iron: §lON §r§7- Starting scan...");
+                client.player.sendChatMessage("§a[Ghost] 7 Sexy Iron: §lON");
             }
         } else {
             DebugLogger.log("Strategy DISABLED.");
@@ -180,6 +197,20 @@ public class OverworldManager {
             if (client.player != null) {
                 client.player.sendChatMessage("§c[Ghost] 7 Sexy Iron: §lOFF");
             }
+        }
+    }
+
+    /**
+     * Resume scanning after target found.
+     */
+    public static void rescan() {
+        if (currentState == State.TARGET_FOUND) {
+            currentState = State.IDLE;
+            targetEntity = null;
+            targetPos = null;
+            targetType = "";
+            scanCooldown = 0;
+            active = true;
         }
     }
 
