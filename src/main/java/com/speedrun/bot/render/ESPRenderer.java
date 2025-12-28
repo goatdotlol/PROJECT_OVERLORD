@@ -1,8 +1,9 @@
 package com.speedrun.bot.render;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.speedrun.bot.strategy.OverworldManager;
-import com.speedrun.bot.strategy.AutoSpeedrunManager;
+import com.speedrun.bot.systems.AsyncChunkScanner;
+import com.speedrun.bot.systems.InteractionControl;
+import com.speedrun.bot.systems.PathingControl;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.client.render.Tessellator;
@@ -14,6 +15,7 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 import org.lwjgl.opengl.GL11;
+import java.util.List;
 
 public class ESPRenderer {
 
@@ -37,45 +39,54 @@ public class ESPRenderer {
 
         Vec3d cameraPos = client.gameRenderer.getCamera().getPos();
 
-        // 1. Render Autonomous Target (Prioritized)
-        if (AutoSpeedrunManager.isActive()) {
-            renderTarget(matrices, AutoSpeedrunManager.getTargetEntity(), AutoSpeedrunManager.getTargetPos(),
-                    AutoSpeedrunManager.getTargetType(), cameraPos, tickDelta, true);
+        // 1. Render Break Target (Red)
+        BlockPos breakTarget = InteractionControl.getBreakTarget();
+        if (breakTarget != null) {
+            drawBox(matrices, new Box(breakTarget), cameraPos, new float[] { 1.0f, 0.0f, 0.0f, 0.5f });
         }
 
-        // 2. Render Passive Scan Target
-        if (OverworldManager.isActive()) {
-            renderTarget(matrices, OverworldManager.getTargetEntity(), OverworldManager.getTargetPos(),
-                    OverworldManager.getTargetType(), cameraPos, tickDelta, false);
+        // 2. Render Path (Blue Line)
+        List<BlockPos> path = PathingControl.getCurrentPath();
+        if (path != null && !path.isEmpty()) {
+            drawPath(matrices, path, cameraPos, new float[] { 0.0f, 0.5f, 1.0f, 1.0f });
+        }
+
+        // 3. Render Golem (Iron Color)
+        Entity golem = AsyncChunkScanner.getNearestGolem();
+        if (golem != null && golem.isAlive()) {
+            drawBox(matrices, golem.getBoundingBox(), cameraPos, new float[] { 0.8f, 0.8f, 0.8f, 0.5f });
+        }
+
+        // 4. Render Iron Ore (White Box) - Optional if debug needed
+        BlockPos iron = AsyncChunkScanner.getNearestIron();
+        if (iron != null) {
+            drawBox(matrices, new Box(iron), cameraPos, new float[] { 0.9f, 0.6f, 0.5f, 0.3f });
         }
     }
 
-    private static void renderTarget(MatrixStack matrices, Entity entity, BlockPos pos, String type, Vec3d cameraPos,
-            float tickDelta, boolean isAuto) {
-        if (entity != null) {
-            double x = entity.prevX + (entity.getX() - entity.prevX) * tickDelta;
-            double y = entity.prevY + (entity.getY() - entity.prevY) * tickDelta;
-            double z = entity.prevZ + (entity.getZ() - entity.prevZ) * tickDelta;
-            Box box = entity.getBoundingBox().offset(-entity.getX() + x, -entity.getY() + y, -entity.getZ() + z);
-            drawBox(matrices, box, cameraPos, getColorForType(type, isAuto));
-        } else if (pos != null) {
-            drawBox(matrices, new Box(pos), cameraPos, getColorForType(type, isAuto));
-        }
-    }
+    private static void drawPath(MatrixStack matrices, List<BlockPos> path, Vec3d cameraPos, float[] color) {
+        RenderSystem.disableTexture();
+        RenderSystem.disableDepthTest();
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.lineWidth(3.0f);
 
-    private static float[] getColorForType(String type, boolean isAuto) {
-        float alpha = isAuto ? 1.0f : 0.5f; // Active target is more solid
-        if (type.contains("WOOD"))
-            return new float[] { 0.6f, 0.4f, 0.2f, alpha }; // Brown
-        if (type.contains("GOLEM"))
-            return new float[] { 1.0f, 0.5f, 0.0f, alpha };
-        if (type.contains("VILLAGER"))
-            return new float[] { 0.0f, 1.0f, 0.0f, alpha };
-        if (type.contains("IRON"))
-            return new float[] { 1.0f, 1.0f, 1.0f, alpha };
-        if (type.contains("LAVA"))
-            return new float[] { 1.0f, 0.2f, 0.0f, alpha };
-        return new float[] { 0.0f, 1.0f, 1.0f, alpha };
+        Tessellator tessellator = Tessellator.getInstance();
+        BufferBuilder buffer = tessellator.getBuffer();
+        Matrix4f model = matrices.peek().getModel();
+
+        buffer.begin(GL11.GL_LINE_STRIP, VertexFormats.POSITION_COLOR);
+
+        for (BlockPos pos : path) {
+            buffer.vertex(model, (float) (pos.getX() + 0.5 - cameraPos.x), (float) (pos.getY() + 0.5 - cameraPos.y),
+                    (float) (pos.getZ() + 0.5 - cameraPos.z))
+                    .color(color[0], color[1], color[2], color[3]).next();
+        }
+
+        tessellator.draw();
+        RenderSystem.enableDepthTest();
+        RenderSystem.enableTexture();
+        RenderSystem.disableBlend();
     }
 
     private static void drawBox(MatrixStack matrices, Box box, Vec3d cameraPos, float[] color) {

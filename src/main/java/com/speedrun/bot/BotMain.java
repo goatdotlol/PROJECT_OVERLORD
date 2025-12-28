@@ -15,6 +15,7 @@ public class BotMain implements ClientModInitializer {
     public static final String MOD_ID = "ghost_runner";
     private static KeyBinding toggleKey;
     private static boolean enabled = false;
+    public static long startTime = 0;
 
     @Override
     public void onInitializeClient() {
@@ -40,7 +41,15 @@ public class BotMain implements ClientModInitializer {
                     PathingControl.stop(client);
                     InteractionControl.stopBreaking(client);
                     GoalEngine.reset();
+                    startTime = 0;
+                } else {
+                    startTime = System.currentTimeMillis();
                 }
+            }
+
+            if (enabled) {
+                long elapsed = System.currentTimeMillis() - startTime;
+                // We can format this string for the HUD to grab
             }
 
             if (!enabled)

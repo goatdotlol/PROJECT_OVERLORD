@@ -23,6 +23,10 @@ public class PathingControl {
         currentPath = null;
     }
 
+    public static List<BlockPos> getCurrentPath() {
+        return currentPath;
+    }
+
     public static void tick(MinecraftClient client) {
         if (client.player == null || finalDestination == null)
             return;
@@ -53,6 +57,7 @@ public class PathingControl {
             // Movement Inputs (Priority 1: Pathing)
             HumanoidControl.lookAt(client, nextNode, 1);
             client.options.keyForward.setPressed(true);
+            client.player.setSprinting(true); // Always sprint for speed
 
             // Robust jumping logic
             if (nextNode.getY() > playerPos.getY() + 0.1 || client.player.horizontalCollision) {

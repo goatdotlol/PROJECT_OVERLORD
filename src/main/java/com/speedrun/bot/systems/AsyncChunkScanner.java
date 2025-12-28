@@ -1,5 +1,6 @@
 package com.speedrun.bot.systems;
 
+import com.speedrun.bot.utils.DebugLogger;
 import net.minecraft.block.Block;
 import net.minecraft.block.Blocks;
 import net.minecraft.client.MinecraftClient;
@@ -183,6 +184,27 @@ public class AsyncChunkScanner {
             }
         }
         return null;
+    }
+
+    public static void deepScan(MinecraftClient client) {
+        // "Pro Method": 0FPS deep scan.
+        // Loops a large radius immediately.
+        if (client.world == null || client.player == null)
+            return;
+
+        int radius = 12; // 12 chunks = 192 blocks radius
+        BlockPos playerPos = client.player.getBlockPos();
+        int cx = playerPos.getX() >> 4;
+        int cz = playerPos.getZ() >> 4;
+
+        DebugLogger.log("Starting DEEP SCAN...");
+
+        for (int x = -radius; x <= radius; x++) {
+            for (int z = -radius; z <= radius; z++) {
+                scanChunk(client, cx + x, cz + z);
+            }
+        }
+        DebugLogger.log("Deep Scan Complete.");
     }
 
     public static void invalidateCache() {

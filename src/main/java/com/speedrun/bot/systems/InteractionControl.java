@@ -44,6 +44,10 @@ public class InteractionControl {
         breakTarget = pos;
     }
 
+    public static BlockPos getBreakTarget() {
+        return breakTarget;
+    }
+
     public static void stopBreaking(MinecraftClient client) {
         breakTarget = null;
         if (client.options != null) {

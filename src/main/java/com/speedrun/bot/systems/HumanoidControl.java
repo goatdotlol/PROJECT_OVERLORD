@@ -41,6 +41,12 @@ public class HumanoidControl {
         if (client.player == null)
             return;
 
+        // Free Look Check: If no system requested a look this tick, do NOT touch the
+        // camera.
+        if (currentPriority == 0) {
+            return;
+        }
+
         // Reset priority for the next tick cycle
         currentPriority = 0;
 

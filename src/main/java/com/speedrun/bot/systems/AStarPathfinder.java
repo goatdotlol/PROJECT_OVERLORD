@@ -1,5 +1,7 @@
 package com.speedrun.bot.systems;
 
+import net.minecraft.block.Block;
+import net.minecraft.block.Blocks;
 import net.minecraft.block.Material;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.util.math.BlockPos;
@@ -10,7 +12,7 @@ import java.util.*;
  */
 public class AStarPathfinder {
 
-    private static final int MAX_ITERATIONS = 1500;
+    private static final int MAX_ITERATIONS = 3000;
 
     public static class Node {
         public BlockPos pos;
@@ -65,24 +67,29 @@ public class AStarPathfinder {
                     if (x == 0 && z == 0)
                         continue;
 
-                    // 1. FLAT MOVE
+                    // 1. FLAT MOVE (Walk/Swim)
                     BlockPos neighbor = current.pos.add(x, 0, z);
-                    if (isSafe(client, neighbor)) {
-                        addNode(open, closed, neighbor, current, target, (x != 0 && z != 0) ? 1.414 : 1.0);
-                        continue;
+                    if (canMoveTo(client, neighbor)) {
+                        double cost = (x != 0 && z != 0) ? 1.414 : 1.0;
+                        if (isWater(client, neighbor))
+                            cost *= 1.5; // Swimming matches slower
+                        addNode(open, closed, neighbor, current, target, cost);
                     }
 
-                    // 2. JUMP (Step up)
+                    // 2. JUMP (Step up 1 block)
                     BlockPos jumpPos = current.pos.add(x, 1, z);
-                    if (isSafe(client, jumpPos) && isSolid(client, current.pos.add(x, 0, z))) {
+                    if (canMoveTo(client, jumpPos) && isSolid(client, current.pos.add(x, 0, z))) { // Ensure we are
+                                                                                                   // jumping onto
+                                                                                                   // something
                         addNode(open, closed, jumpPos, current, target, 1.2);
-                        continue;
                     }
 
                     // 3. DROP (Step down)
                     for (int i = 1; i <= 3; i++) {
                         BlockPos dropPos = current.pos.add(x, -i, z);
-                        if (isSafe(client, dropPos) && isAir(client, current.pos.add(x, -i + 1, z))) {
+                        if (canMoveTo(client, dropPos) && isAir(client, current.pos.add(x, -i + 1, z))) { // Check head
+                                                                                                          // clearance
+                                                                                                          // for drop
                             addNode(open, closed, dropPos, current, target, 1.0 + (i * 0.5));
                             break;
                         }
@@ -113,11 +120,29 @@ public class AStarPathfinder {
         return path;
     }
 
-    private static boolean isSafe(MinecraftClient client, BlockPos pos) {
-        return isAir(client, pos) &&
-                isAir(client, pos.up()) &&
-                isSolid(client, pos.down()) &&
-                !isLava(client, pos.down());
+    // --- Safety & Material Checks ---
+
+    private static boolean canMoveTo(MinecraftClient client, BlockPos pos) {
+        // Must be safe to stand in (Air or Water) AND safe to stand ON (Solid below or
+        // Water below)
+        // AND Head must be safe (Air/Water)
+        return isSafeBody(client, pos) && isSafeBody(client, pos.up()) &&
+                (isSolid(client, pos.down()) || isWater(client, pos.down())); // Swim support
+    }
+
+    private static boolean isSafeBody(MinecraftClient client, BlockPos pos) {
+        if (client.world == null)
+            return false;
+        Material m = client.world.getBlockState(pos).getMaterial();
+        // Safe if Air, Water, Grass (tall grass), etc.
+        // Unsafe if Solid, Lava, Fire, Magma
+        if (m.isSolid())
+            return false;
+        Block b = client.world.getBlockState(pos).getBlock();
+        if (b == net.minecraft.block.Blocks.LAVA || b == net.minecraft.block.Blocks.FIRE
+                || b == net.minecraft.block.Blocks.MAGMA_BLOCK)
+            return false;
+        return true;
     }
 
     private static boolean isSolid(MinecraftClient client, BlockPos pos) {
@@ -130,13 +155,12 @@ public class AStarPathfinder {
     private static boolean isAir(MinecraftClient client, BlockPos pos) {
         if (client.world == null)
             return false;
-        Material m = client.world.getBlockState(pos).getMaterial();
-        return !m.isSolid() && !m.isLiquid();
+        return client.world.getBlockState(pos).isAir();
     }
 
-    private static boolean isLava(MinecraftClient client, BlockPos pos) {
+    private static boolean isWater(MinecraftClient client, BlockPos pos) {
         if (client.world == null)
             return false;
-        return client.world.getBlockState(pos).getBlock() == net.minecraft.block.Blocks.LAVA;
+        return client.world.getBlockState(pos).getMaterial() == Material.WATER;
     }
 }
