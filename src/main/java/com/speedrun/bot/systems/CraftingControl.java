@@ -5,7 +5,10 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.ingame.CraftingScreen;
 import net.minecraft.client.gui.screen.ingame.InventoryScreen;
 import net.minecraft.screen.slot.SlotActionType;
+import net.minecraft.item.Item;
 import net.minecraft.item.Items;
+import net.minecraft.tag.ItemTags;
+import net.minecraft.tag.Tag;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
@@ -17,42 +20,43 @@ public class CraftingControl {
     private static int stepTimer = 0;
 
     /**
-     * Tries to craft oak planks from logs in the 2x2 grid.
+     * Tries to craft planks from ANY logs in the 2x2 grid.
      */
     public static void craftPlanks(MinecraftClient client) {
         if (stepTimer > 0) {
             stepTimer--;
             return;
-        } // Cooldown
+        }
 
         if (client.currentScreen == null) {
             client.openScreen(new InventoryScreen(client.player));
-            stepTimer = 10;
+            stepTimer = 15; // Give it time to open
             return;
         }
 
-        // Assume we have logs. Click them into slot 1 (Top Left of 2x2)
-        // 2x2 Crafting slots in InventoryContainer are 1, 2, 3, 4. Output is 0.
-        // Main Inv starts at 9.
-
-        // Simple logic: Find log in inv, click it, click slot 1, shift-click output.
-        // Note: Slot IDs are container specific.
-
-        // For now, let's implement a very basic automation:
-        // 1. Find Log
-        // 2. Pickup
-        // 3. Place in Slot 1
-        // 4. Shift click Slot 0
-
-        // (Simplified implementation for space - real implementation needs exact slot
-        // IDs)
-        int logSlot = findItemSlot(client, Items.OAK_LOG); // Naive helper
+        // Logic: Find ANY Log -> Slot 1 -> Craft All
+        int logSlot = findItemSlot(client, ItemTags.LOGS);
         if (logSlot != -1) {
-            click(client, logSlot, 0, SlotActionType.PICKUP); // Pick up
-            click(client, 1, 0, SlotActionType.PICKUP); // Place in grid
-            click(client, 0, 0, SlotActionType.QUICK_MOVE); // Craft all
+            // Click Log
+            click(client, logSlot, 0, SlotActionType.PICKUP);
+            // Place in Grid Slot 1 (Top Left 2x2)
+            click(client, 1, 0, SlotActionType.PICKUP);
+            // Put remaining logs back (if stack size > 1) -> Actually, just click slot 1
+            // again to drop one?
+            // No, simplified speedrun usage: Just put whole stack in, craft all planks.
+
+            // Shift-Click Output (Slot 0)
+            click(client, 0, 0, SlotActionType.QUICK_MOVE);
+
+            // Return any ingredient remainder to inventory?
+            // The logs stay in the grid if we don't pick them up.
+            // But we closed screen. They drop or return. Good enough.
+
             client.player.closeHandledScreen();
             stepTimer = 20;
+        } else {
+            // If we are here, we have no logs. Close screen to reset?
+            client.player.closeHandledScreen();
         }
     }
 
@@ -61,19 +65,27 @@ public class CraftingControl {
             stepTimer--;
             return;
         }
-        // Recipe: 2 Planks (Vertical)
         if (client.currentScreen == null) {
             client.openScreen(new InventoryScreen(client.player));
-            stepTimer = 10;
+            stepTimer = 15;
             return;
         }
-        // Naive: Planks in slot 1 and 3 (top left, bottom left of 2x2)
-        click(client, findItemSlot(client, Items.OAK_PLANKS), 0, SlotActionType.PICKUP);
-        click(client, 1, 1, SlotActionType.PICKUP); // Place 1
-        click(client, 3, 1, SlotActionType.PICKUP); // Place 1
-        click(client, 0, 0, SlotActionType.QUICK_MOVE); // Craft
-        client.player.closeHandledScreen();
-        stepTimer = 20;
+
+        // Find Planks (Any)
+        int plankSlot = findItemSlot(client, ItemTags.PLANKS);
+        if (plankSlot != -1) {
+            click(client, plankSlot, 0, SlotActionType.PICKUP);
+            click(client, 1, 1, SlotActionType.PICKUP); // Place 1 top-left
+            click(client, 3, 1, SlotActionType.PICKUP); // Place 1 bottom-left
+
+            // Return holding to inv (if any left) -> optimization: Check if empty hand?
+            // Just click original slot to put back
+            click(client, plankSlot, 0, SlotActionType.PICKUP);
+
+            click(client, 0, 0, SlotActionType.QUICK_MOVE); // Craft Sticks
+            client.player.closeHandledScreen();
+            stepTimer = 20;
+        }
     }
 
     public static void craftTable(MinecraftClient client) {
@@ -83,19 +95,24 @@ public class CraftingControl {
         }
         if (client.currentScreen == null) {
             client.openScreen(new InventoryScreen(client.player));
-            stepTimer = 10;
+            stepTimer = 15;
             return;
         }
-        // Recipe: 4 Planks (2x2)
-        int plankSlot = findItemSlot(client, Items.OAK_PLANKS);
-        click(client, plankSlot, 0, SlotActionType.PICKUP);
-        click(client, 1, 1, SlotActionType.PICKUP);
-        click(client, 2, 1, SlotActionType.PICKUP);
-        click(client, 3, 1, SlotActionType.PICKUP);
-        click(client, 4, 1, SlotActionType.PICKUP);
-        click(client, 0, 0, SlotActionType.PICKUP); // Craft 1
-        client.player.closeHandledScreen();
-        stepTimer = 20;
+        // Recipe: 4 Planks
+        int plankSlot = findItemSlot(client, ItemTags.PLANKS);
+        if (plankSlot != -1) {
+            click(client, plankSlot, 0, SlotActionType.PICKUP);
+            click(client, 1, 1, SlotActionType.PICKUP);
+            click(client, 2, 1, SlotActionType.PICKUP);
+            click(client, 3, 1, SlotActionType.PICKUP);
+            click(client, 4, 1, SlotActionType.PICKUP);
+
+            click(client, plankSlot, 0, SlotActionType.PICKUP); // Return rest
+
+            click(client, 0, 0, SlotActionType.PICKUP); // Craft 1 Table
+            client.player.closeHandledScreen();
+            stepTimer = 20;
+        }
     }
 
     public static void craftPickaxe(MinecraftClient client) {
@@ -103,33 +120,38 @@ public class CraftingControl {
             stepTimer--;
             return;
         }
-        // Needs Crafting Table Screen
         if (!(client.currentScreen instanceof CraftingScreen)) {
-            // GoalEngine handles opening the table
             return;
         }
-        // Recipe: 3 Planks top, 2 Sticks middle
-        // Slots 1,2,3 (Planks), 5,8 (Sticks)
-        int plankSlot = findItemSlot(client, Items.OAK_PLANKS);
-        int stickSlot = findItemSlot(client, Items.STICK);
 
-        // Place Planks
-        click(client, plankSlot, 0, SlotActionType.PICKUP);
-        click(client, 1, 1, SlotActionType.PICKUP);
-        click(client, 2, 1, SlotActionType.PICKUP);
-        click(client, 3, 1, SlotActionType.PICKUP);
+        int plankSlot = findItemSlot(client, ItemTags.PLANKS);
+        int stickSlot = findItemSlot(client, ItemTags.WOODEN_SLABS); // Wait, Sticks are not slabs?
+        // Sticks do not have a dedicated broad tag in 1.16 usually, just 'sticks'.
+        // But let's fallback to Item check for sticks if TAG fails or just use
+        // Items.STICK check.
+        // Actually ItemTags.SIGNS? No. Items.STICK is unique enough.
 
-        // Return remainder if any
-        click(client, plankSlot, 0, SlotActionType.PICKUP);
+        // Correct way to find sticks:
+        stickSlot = findItemSlot(client, Items.STICK);
 
-        // Place Sticks
-        click(client, stickSlot, 0, SlotActionType.PICKUP);
-        click(client, 5, 1, SlotActionType.PICKUP);
-        click(client, 8, 1, SlotActionType.PICKUP);
+        if (plankSlot != -1 && stickSlot != -1) {
+            // Planks Top Row
+            click(client, plankSlot, 0, SlotActionType.PICKUP);
+            click(client, 1, 1, SlotActionType.PICKUP);
+            click(client, 2, 1, SlotActionType.PICKUP);
+            click(client, 3, 1, SlotActionType.PICKUP);
+            click(client, plankSlot, 0, SlotActionType.PICKUP); // Return
 
-        click(client, 0, 0, SlotActionType.QUICK_MOVE);
-        client.player.closeHandledScreen();
-        stepTimer = 20;
+            // Sticks Middle Col
+            click(client, stickSlot, 0, SlotActionType.PICKUP);
+            click(client, 5, 1, SlotActionType.PICKUP);
+            click(client, 8, 1, SlotActionType.PICKUP);
+            click(client, stickSlot, 0, SlotActionType.PICKUP); // Return
+
+            click(client, 0, 0, SlotActionType.QUICK_MOVE);
+            client.player.closeHandledScreen();
+            stepTimer = 20;
+        }
     }
 
     public static void craftStonePickaxe(MinecraftClient client) {
@@ -137,31 +159,32 @@ public class CraftingControl {
             stepTimer--;
             return;
         }
-        if (!(client.currentScreen instanceof CraftingScreen)) {
-            return; // GoalEngine opens table
-        }
-        // Recipe: 3 Cobble top, 2 Sticks middle
-        int cobbleSlot = findItemSlot(client, Items.COBBLESTONE);
-        int stickSlot = findItemSlot(client, Items.STICK);
-
-        if (cobbleSlot == -1 || stickSlot == -1)
+        if (!(client.currentScreen instanceof CraftingScreen))
             return;
 
-        // Place Cobble
-        click(client, cobbleSlot, 0, SlotActionType.PICKUP);
-        click(client, 1, 1, SlotActionType.PICKUP);
-        click(client, 2, 1, SlotActionType.PICKUP);
-        click(client, 3, 1, SlotActionType.PICKUP);
-        click(client, cobbleSlot, 0, SlotActionType.PICKUP);
+        int cobbleSlot = findItemSlot(client, Items.COBBLESTONE); // OR ItemTags.STONE_TOOL_MATERIALS implies
+                                                                  // cobble/blackstone
+        if (cobbleSlot == -1)
+            cobbleSlot = findItemSlot(client, ItemTags.STONE_TOOL_MATERIALS);
 
-        // Place Sticks
-        click(client, stickSlot, 0, SlotActionType.PICKUP);
-        click(client, 5, 1, SlotActionType.PICKUP);
-        click(client, 8, 1, SlotActionType.PICKUP);
+        int stickSlot = findItemSlot(client, Items.STICK);
 
-        click(client, 0, 0, SlotActionType.QUICK_MOVE);
-        client.player.closeHandledScreen();
-        stepTimer = 20;
+        if (cobbleSlot != -1 && stickSlot != -1) {
+            click(client, cobbleSlot, 0, SlotActionType.PICKUP);
+            click(client, 1, 1, SlotActionType.PICKUP);
+            click(client, 2, 1, SlotActionType.PICKUP);
+            click(client, 3, 1, SlotActionType.PICKUP);
+            click(client, cobbleSlot, 0, SlotActionType.PICKUP);
+
+            click(client, stickSlot, 0, SlotActionType.PICKUP);
+            click(client, 5, 1, SlotActionType.PICKUP);
+            click(client, 8, 1, SlotActionType.PICKUP);
+            click(client, stickSlot, 0, SlotActionType.PICKUP);
+
+            click(client, 0, 0, SlotActionType.QUICK_MOVE);
+            client.player.closeHandledScreen();
+            stepTimer = 20;
+        }
     }
 
     private static void click(MinecraftClient client, int slotId, int button, SlotActionType action) {
@@ -171,21 +194,22 @@ public class CraftingControl {
         }
     }
 
-    private static int findItemSlot(MinecraftClient client, net.minecraft.item.Item item) {
-        if (client.player == null)
+    private static int findItemSlot(MinecraftClient client, Item item) {
+        if (client.player == null || client.player.inventory == null)
             return -1;
-        if (client.player.inventory == null)
-            return -1;
-        // Check main inventory slots (usually index 9 to 35, plus hotbar 0-8. In
-        // Container, hotbar is 36-44 usually)
-        // Accessing via player.inventory directly is safer for finding the item, but
-        // for clicking we need the slot ID.
-        // For PlayerScreenHandler: 0=Craft, 1-4=Craft, 5=Helm... 9-35=Store,
-        // 36-44=Hotbar.
-        // Assuming we are in Player Screen (Survival Inventory)
-
         for (int i = 9; i < 45; i++) {
             if (client.player.currentScreenHandler.getSlot(i).getStack().getItem() == item)
+                return i;
+        }
+        return -1;
+    }
+
+    // Helper for Tags
+    private static int findItemSlot(MinecraftClient client, Tag<Item> tag) {
+        if (client.player == null || client.player.inventory == null)
+            return -1;
+        for (int i = 9; i < 45; i++) {
+            if (tag.contains(client.player.currentScreenHandler.getSlot(i).getStack().getItem()))
                 return i;
         }
         return -1;
