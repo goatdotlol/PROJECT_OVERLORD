@@ -86,14 +86,14 @@ public class GoalEngine {
                 // 2. If valid table is nearby, open it
                 BlockPos table = AsyncChunkScanner.findNearestTable(client);
                 if (table == null && tablePos != null
-                        && client.player.getSquaredDistance(tablePos.getX(), tablePos.getY(), tablePos.getZ()) < 25) {
+                        && client.player.squaredDistanceTo(tablePos.getX(), tablePos.getY(), tablePos.getZ()) < 25) {
                     // Fallback: use memory
                     table = tablePos;
                 }
 
                 if (table != null) {
                     // Move to table if too far
-                    if (Math.sqrt(client.player.getSquaredDistance(table.getX(), table.getY(), table.getZ())) > 4) {
+                    if (Math.sqrt(client.player.squaredDistanceTo(table.getX(), table.getY(), table.getZ())) > 4) {
                         PathingControl.setTarget(table);
                         status = "Moving to Table";
                     } else {
