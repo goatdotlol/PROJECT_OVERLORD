@@ -39,6 +39,12 @@ public class ESPRenderer {
 
         Vec3d cameraPos = client.gameRenderer.getCamera().getPos();
 
+        // 0. Render Item Drops (Yellow) - Priority
+        Entity drop = AsyncChunkScanner.getNearestItem();
+        if (drop != null) {
+            drawBox(matrices, drop.getBoundingBox(), cameraPos, new float[] { 1.0f, 1.0f, 0.0f, 0.8f });
+        }
+
         // 1. Render Break Target (Red)
         BlockPos breakTarget = InteractionControl.getBreakTarget();
         if (breakTarget != null) {

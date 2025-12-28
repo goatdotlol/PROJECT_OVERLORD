@@ -5,6 +5,7 @@ import net.minecraft.block.Blocks;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.Entity;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.client.gui.screen.ingame.CraftingScreen;
 
 /**
  * GoalEngine - Strategic Decision Making (v2.1 Logic).
@@ -30,12 +31,18 @@ public class GoalEngine {
     public static State currentState = State.IDLE;
     public static String status = "Waiting...";
     private static BlockPos tablePos = null;
+    private static long lastInteractionTime = 0; // Cooldown
 
     public static void tick(MinecraftClient client) {
         if (client.player == null)
             return;
 
         updateState(client);
+
+        // Global Cooldown check to prevent spam
+        if (System.currentTimeMillis() - lastInteractionTime < 200) {
+            return; // Wait 200ms between heavy actions
+        }
 
         switch (currentState) {
             case GATHER_LOGS:
@@ -66,46 +73,74 @@ public class GoalEngine {
                 CraftingControl.craftTable(client);
                 break;
 
-            case PLACE_TABLE:
-                status = "Placing Table";
-                // Look down and place
-                HumanoidControl.lookAt(client, client.player.getBlockPos().down(), 2);
-                if (client.player.pitch > 80) { // If looking down
-                    // Select table
-                    int tableSlot = findSlot(client, net.minecraft.item.Items.CRAFTING_TABLE);
-                    if (tableSlot != -1) {
-                        client.player.inventory.selectedSlot = tableSlot;
-                        client.interactionManager.interactItem(client.player, client.world,
-                                net.minecraft.util.Hand.MAIN_HAND);
-
-                        // Prediction: It will be at offset
-                        BlockPos predicted = client.player.getBlockPos()
-                                .offset(net.minecraft.util.math.Direction.fromRotation(client.player.yaw));
-                        // Verify next tick
-                        tablePos = predicted;
-                    }
-                }
-                break;
-
             case CRAFT_WOOD_PICK:
                 status = "Crafting Wood Pickaxe";
-                // Check if near table
+
+                // 1. If we are already in the GUI, just craft!
+                if (client.currentScreen instanceof net.minecraft.client.gui.screen.ingame.CraftingScreen) {
+                    status = "Crafting Pick (GUI Open)";
+                    CraftingControl.craftPickaxe(client);
+                    return; // IMPORTANT: accurate return to avoid re-interaction
+                }
+
+                // 2. If valid table is nearby, open it
                 BlockPos table = AsyncChunkScanner.findNearestTable(client);
-                // Fallback to predicted position if scan fails (it might take a second to
-                // update)
                 if (table == null && tablePos != null
-                        && client.player.squaredDistanceTo(tablePos.getX(), tablePos.getY(), tablePos.getZ()) < 16) {
-                    if (client.world.getBlockState(tablePos).getBlock() == Blocks.CRAFTING_TABLE) {
-                        table = tablePos;
-                    }
+                        && client.player.getSquaredDistance(tablePos.getX(), tablePos.getY(), tablePos.getZ()) < 25) {
+                    // Fallback: use memory
+                    table = tablePos;
                 }
 
                 if (table != null) {
-                    InteractionControl.interactBlock(client, table); // Open GUI
-                    CraftingControl.craftPickaxe(client);
+                    // Move to table if too far
+                    if (Math.sqrt(client.player.getSquaredDistance(table.getX(), table.getY(), table.getZ())) > 4) {
+                        PathingControl.setTarget(table);
+                        status = "Moving to Table";
+                    } else {
+                        // Close enough: Interact
+                        InteractionControl.interactBlock(client, table);
+                        PathingControl.stop(client);
+                    }
                 } else {
-                    status = "Lost Table? Re-placing.";
+                    status = "Lost Table. Re-placing.";
                     currentState = State.PLACE_TABLE;
+                }
+                break;
+
+            case PLACE_TABLE:
+                status = "Placing Table";
+
+                // Smart Placement: Find a valid spot (Air block with Solid block below)
+                BlockPos targetPlace = findPlacementSpot(client);
+
+                if (targetPlace == null) {
+                    status = "No valid spot to place table!";
+                    tablePos = client.player.getBlockPos(); // Desperate fail-safe
+                    return;
+                }
+
+                PathingControl.stop(client); // Stop moving to place
+                HumanoidControl.lookAt(client, targetPlace, 2);
+
+                // Relaxed Pitch Check (45 degrees is enough to hit the block)
+                double lookError = Math.abs(client.player.pitch - 90);
+                // Just swing if we are looking somewhat down or at the block
+                if (true) { // removed strict check, just spam it if we are close
+                    int tableSlot = findSlot(client, net.minecraft.item.Items.CRAFTING_TABLE);
+                    if (tableSlot != -1) {
+                        client.player.inventory.selectedSlot = tableSlot;
+                        // Force Look at center
+                        HumanoidControl.lookAt(client, targetPlace, 2);
+
+                        // Interact
+                        client.interactionManager.interactItem(client.player, client.world,
+                                net.minecraft.util.Hand.MAIN_HAND);
+                        client.player.swingHand(net.minecraft.util.Hand.MAIN_HAND);
+
+                        // Assume success for speed
+                        tablePos = targetPlace;
+                        currentState = State.CRAFT_WOOD_PICK; // Move on immediately
+                    }
                 }
                 break;
 
@@ -201,6 +236,23 @@ public class GoalEngine {
                 currentState = State.GATHER_IRON;
             }
         }
+    }
+
+    private static BlockPos findPlacementSpot(MinecraftClient client) {
+        BlockPos playerPos = client.player.getBlockPos();
+        // Check 3x3 around player
+        for (int x = -1; x <= 1; x++) {
+            for (int z = -1; z <= 1; z++) {
+                // Try to place at feet level or 1 block away
+                BlockPos target = playerPos.add(x, 0, z);
+                // Must be AIR and have SOLID below
+                if (client.world.getBlockState(target).getMaterial().isReplaceable() &&
+                        client.world.getBlockState(target.down()).getMaterial().isSolid()) {
+                    return target;
+                }
+            }
+        }
+        return playerPos.down(); // Fallback
     }
 
     private static int findSlot(MinecraftClient client, net.minecraft.item.Item item) {

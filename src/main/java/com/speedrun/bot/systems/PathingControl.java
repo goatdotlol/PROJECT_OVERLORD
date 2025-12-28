@@ -49,11 +49,37 @@ public class PathingControl {
         return currentPath;
     }
 
+    private static int stuckTicks = 0;
+    private static BlockPos lastPos = null;
+
     public static void tick(MinecraftClient client) {
         if (client.player == null || finalDestination == null)
             return;
 
         BlockPos playerPos = client.player.getBlockPos();
+
+        // --- STUCK DETECTION ---
+        if (lastPos != null && playerPos.equals(lastPos)) {
+            stuckTicks++;
+            if (stuckTicks > 20) { // Stuck for 1 second
+                // Try simple unstuck: Jump + Random waddle
+                client.options.keyJump.setPressed(true);
+                if (rng.nextBoolean())
+                    client.options.keyLeft.setPressed(true);
+                else
+                    client.options.keyRight.setPressed(true);
+
+                if (stuckTicks > 40) { // Still stuck? Recalculate path completely
+                    currentPath = null;
+                    stuckTicks = 0;
+                }
+            }
+        } else {
+            stuckTicks = 0;
+            lastPos = playerPos;
+            client.options.keyLeft.setPressed(false);
+            client.options.keyRight.setPressed(false);
+        }
 
         // 1. Path Calculation (A*)
         if (currentPath == null || currentPath.isEmpty()) {
