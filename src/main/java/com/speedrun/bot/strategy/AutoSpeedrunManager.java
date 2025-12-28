@@ -2,22 +2,26 @@ package com.speedrun.bot.strategy;
 
 import com.speedrun.bot.utils.DebugLogger;
 import com.speedrun.bot.utils.InventoryScanner;
-import com.speedrun.bot.perception.WorldScanner;
+import com.speedrun.bot.perception.DistributedScanner;
 import com.speedrun.bot.navigation.MovementManager;
 import com.speedrun.bot.input.InteractionManager;
+import com.speedrun.bot.input.InputSimulator;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.entity.Entity;
+import net.minecraft.util.math.Vec3d;
+
+import java.util.Random;
 
 public class AutoSpeedrunManager {
 
     public enum Goal {
         IDLE,
         GET_WOOD,
-        CRAFT_BASIC_TOOLS,
+        CRAFT_TOOLS,
         GET_IRON,
         GET_LAVA,
-        DONE
+        WANDER
     }
 
     private static Goal currentGoal = Goal.IDLE;
@@ -27,31 +31,31 @@ public class AutoSpeedrunManager {
     private static Entity currentTargetEntity = null;
     private static String currentTargetType = "";
 
-    private static int scanCooldown = 0;
-    private static final int SCAN_INTERVAL = 20; // Once per second
+    private static int wanderCooldown = 0;
+    private static final Random random = new Random();
 
     public static void tick(MinecraftClient client) {
         if (!active || client.player == null)
             return;
 
-        if (scanCooldown > 0) {
-            scanCooldown--;
-        } else {
-            scanCooldown = SCAN_INTERVAL;
-            // 1. Determine current goal based on inventory
-            updateGoal();
+        // 1. Tick Perception Engine (Zero Lag)
+        DistributedScanner.tick(client);
 
-            // 2. Refresh target selection (heavy lifting)
-            refreshTarget(client);
-        }
+        // 2. Decide overall goal
+        updateGoal();
 
-        // 3. Constant logic (movement and interaction)
-        executeCurrentTarget(client);
+        // 3. Update target based on goal
+        updateTargetSelection(client);
+
+        // 4. Execution logic (Movement/Interaction)
+        executeTarget(client);
     }
 
     private static void updateGoal() {
         if (!InventoryScanner.hasWood() && InventoryScanner.getIronCount() < 3) {
             currentGoal = Goal.GET_WOOD;
+        } else if (InventoryScanner.hasWood() && !InventoryScanner.hasPickaxe()) {
+            currentGoal = Goal.CRAFT_TOOLS;
         } else if (InventoryScanner.getIronCount() < 7) {
             currentGoal = Goal.GET_IRON;
         } else {
@@ -59,57 +63,74 @@ public class AutoSpeedrunManager {
         }
     }
 
-    private static void refreshTarget(MinecraftClient client) {
+    private static void updateTargetSelection(MinecraftClient client) {
+        if (InteractionManager.isInteracting())
+            return;
+
+        BlockPos newTarget = null;
+        Entity newEntity = null;
+        String type = "";
+
         switch (currentGoal) {
             case GET_WOOD:
-                BlockPos tree = WorldScanner.findTree(40);
-                if (tree != null) {
-                    setTarget(tree, null, "WOOD_LOG");
-                }
+                newTarget = DistributedScanner.getTree();
+                type = "WOOD_LOG";
                 break;
             case GET_IRON:
-                Entity golem = WorldScanner.findIronGolem(80);
-                if (golem != null) {
-                    setTarget(null, golem, "IRON_GOLEM");
-                } else {
-                    WorldScanner.ScanResult village = WorldScanner.findVillage(80);
-                    if (village != null) {
-                        setTarget(village.blockPos, null, village.type);
-                    } else {
-                        BlockPos iron = WorldScanner.findIronOre(40);
-                        if (iron != null) {
-                            setTarget(iron, null, "IRON_ORE");
-                        }
-                    }
-                }
+                newTarget = DistributedScanner.getIron();
+                type = "IRON_ORE";
+                // Add Village/Golem checking here later
                 break;
             case GET_LAVA:
-                BlockPos lava = WorldScanner.findLavaPool(100);
-                if (lava != null) {
-                    setTarget(lava, null, "LAVA_POOL");
-                }
+                newTarget = DistributedScanner.getLava();
+                type = "LAVA_POOL";
                 break;
-            default:
+            case CRAFT_TOOLS:
+                // No physical target, but we might need to stand still
                 break;
+        }
+
+        // If no target found, ENTER WANDER MODE
+        if (newTarget == null && newEntity == null && currentGoal != Goal.CRAFT_TOOLS) {
+            handleWandering(client);
+        } else {
+            setTarget(newTarget, newEntity, type);
+            wanderCooldown = 0; // Found target, stop wandering
         }
     }
 
-    private static void executeCurrentTarget(MinecraftClient client) {
-        if (InteractionManager.isInteracting() || currentTargetPos == null && currentTargetEntity == null)
+    private static void handleWandering(MinecraftClient client) {
+        if (wanderCooldown <= 0) {
+            DebugLogger.log("[Auto] No target in range. Wandering to explore...");
+            // Choose a point 30 blocks away in a random-ish forward direction
+            float yaw = client.player.yaw + (random.nextFloat() * 90 - 45);
+            double rad = Math.toRadians(yaw);
+            double x = -Math.sin(rad) * 30;
+            double z = Math.cos(rad) * 30;
+            BlockPos wanderPos = client.player.getBlockPos().add(x, 0, z);
+            setTarget(wanderPos, null, "WANDER_POINT");
+            wanderCooldown = 200; // Wander for 10 seconds or until target found
+        } else {
+            wanderCooldown--;
+        }
+    }
+
+    private static void executeTarget(MinecraftClient client) {
+        if (currentGoal == Goal.CRAFT_TOOLS) {
+            CraftingManager.craftInInventory(client, "PLANKS");
+            return;
+        }
+
+        if (InteractionManager.isInteracting() || currentTargetPos == null)
             return;
 
-        BlockPos target = currentTargetPos;
-        if (currentTargetEntity != null)
-            target = currentTargetEntity.getBlockPos();
+        double distSq = client.player.getBlockPos().getSquaredDistance(currentTargetPos);
 
-        double distSq = client.player.getBlockPos().getSquaredDistance(target);
-
-        // If we are close enough to the target block, try to interact/break
-        if (distSq < 5.0) {
+        if (distSq < 4.5) { // Within 2 blocks
             if (currentTargetType.equals("WOOD_LOG")) {
-                InteractionManager.breakBlock(target, 60);
+                InteractionManager.breakBlock(currentTargetPos, 80);
             } else if (currentTargetType.equals("IRON_ORE") && InventoryScanner.hasPickaxe()) {
-                InteractionManager.breakBlock(target, 40);
+                InteractionManager.breakBlock(currentTargetPos, 50);
             }
         }
     }
@@ -122,15 +143,14 @@ public class AutoSpeedrunManager {
 
     public static void start() {
         active = true;
-        currentGoal = Goal.IDLE;
-        scanCooldown = 0;
-        DebugLogger.log("[Auto] Autonomous Speedrun ENABLED.");
+        DistributedScanner.tick(MinecraftClient.getInstance()); // Initial pulse
+        DebugLogger.log("[Auto] Autonomous Play ENABLED.");
     }
 
     public static void stop() {
         active = false;
-        currentGoal = Goal.IDLE;
-        DebugLogger.log("[Auto] Autonomous Speedrun DISABLED.");
+        InteractionManager.stopInteraction();
+        DebugLogger.log("[Auto] Autonomous Play DISABLED.");
     }
 
     public static boolean isActive() {

@@ -8,6 +8,7 @@ import com.speedrun.bot.input.InputSimulator;
 import com.speedrun.bot.input.InteractionManager;
 import com.speedrun.bot.strategy.OverworldManager;
 import com.speedrun.bot.strategy.AutoSpeedrunManager;
+import com.speedrun.bot.perception.DistributedScanner;
 import com.speedrun.bot.navigation.MovementManager;
 import net.minecraft.client.options.KeyBinding;
 import net.minecraft.client.util.InputUtil;
@@ -36,11 +37,14 @@ public class BotMain implements ClientModInitializer {
             InputSimulator.tick(client);
             InteractionManager.tick(client);
 
-            // 2. Strategy & Goal Selection
+            // 2. Perception Engine (Zero Lag)
+            DistributedScanner.tick(client);
+
+            // 3. Strategy & Goal Selection
             OverworldManager.tick(client); // Passive scanning
             AutoSpeedrunManager.tick(client); // Goal progression
 
-            // 3. Navigation Tick (LEGS)
+            // 4. Navigation Tick (LEGS)
             MovementManager.tick(client);
 
             // GUI Toggle
