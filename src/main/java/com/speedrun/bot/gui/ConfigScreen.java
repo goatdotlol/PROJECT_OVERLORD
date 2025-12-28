@@ -6,6 +6,8 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.text.LiteralText;
 import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.entity.Entity;
+import net.minecraft.util.math.BlockPos;
 
 public class ConfigScreen extends Screen {
 
@@ -108,11 +110,11 @@ public class ConfigScreen extends Screen {
 
         if (!targetType.isEmpty()) {
             if (OverworldManager.getTargetPos() != null) {
-                var pos = OverworldManager.getTargetPos();
+                BlockPos pos = OverworldManager.getTargetPos();
                 this.client.player.sendChatMessage("§7Target: §6" + targetType + " §fat (" + pos.getX() + ", "
                         + pos.getY() + ", " + pos.getZ() + ")");
             } else if (OverworldManager.getTargetEntity() != null) {
-                var ent = OverworldManager.getTargetEntity();
+                Entity ent = OverworldManager.getTargetEntity();
                 this.client.player.sendChatMessage("§7Target: §6" + targetType + " §fat (" + (int) ent.getX() + ", "
                         + (int) ent.getY() + ", " + (int) ent.getZ() + ")");
             }
