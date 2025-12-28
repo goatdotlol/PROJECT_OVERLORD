@@ -59,15 +59,15 @@ public class GoalEngine {
             case PLACE_TABLE:
                 // Look down and place
                 HumanoidControl.lookAt(client, client.player.getBlockPos().down(), 2);
-                if (client.player.getPitch() > 80) { // If looking down
+                if (client.player.pitch > 80) { // If looking down
                     // Select table
                     int tableSlot = findSlot(client, net.minecraft.item.Items.CRAFTING_TABLE);
                     if (tableSlot != -1) {
-                        client.player.getInventory().selectedSlot = tableSlot;
+                        client.player.inventory.selectedSlot = tableSlot;
                         client.interactionManager.interactItem(client.player, client.world,
                                 net.minecraft.util.Hand.MAIN_HAND);
                         tablePos = client.player.getBlockPos()
-                                .offset(net.minecraft.util.math.Direction.fromRotation(client.player.getYaw()));
+                                .offset(net.minecraft.util.math.Direction.fromRotation(client.player.yaw));
                     }
                 }
                 break;
@@ -81,7 +81,7 @@ public class GoalEngine {
                     table = tablePos;
 
                 if (table != null) {
-                    InteractionControl.interactBlock(table); // Open GUI
+                    InteractionControl.interactBlock(client, table); // Open GUI
                     CraftingControl.craftPickaxe(client);
                 } else {
                     currentState = State.PLACE_TABLE;
@@ -102,7 +102,7 @@ public class GoalEngine {
             case CRAFT_STONE_PICK:
                 if (tablePos != null
                         && client.player.squaredDistanceTo(tablePos.getX(), tablePos.getY(), tablePos.getZ()) < 16) {
-                    InteractionControl.interactBlock(tablePos);
+                    InteractionControl.interactBlock(client, tablePos);
                     CraftingControl.craftStonePickaxe(client);
                 } else {
                     currentState = State.PLACE_TABLE;

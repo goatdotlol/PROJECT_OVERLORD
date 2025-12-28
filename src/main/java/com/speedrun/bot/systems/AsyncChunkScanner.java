@@ -119,6 +119,19 @@ public class AsyncChunkScanner {
         }
     }
 
+    private static boolean isExposed(WorldChunk chunk, int x, int y, int z) {
+        if (y < 255) {
+            // Simple check: Is the block above air?
+            // Since we are inside chunk, we can check directly if y+1 is 16.
+            // But simplest is to trust the world if loaded, or chunk if not.
+            // Chunk relative coords are x=0..15, z=0..15.
+            // Safe way:
+            return !chunk.getBlockState(new BlockPos((chunk.getPos().x << 4) + x, y + 1, (chunk.getPos().z << 4) + z))
+                    .getMaterial().isSolid();
+        }
+        return true;
+    }
+
     private static boolean isLog(Block b) {
         return b == Blocks.OAK_LOG || b == Blocks.BIRCH_LOG || b == Blocks.SPRUCE_LOG || b == Blocks.ACACIA_LOG ||
                 b == Blocks.JUNGLE_LOG || b == Blocks.DARK_OAK_LOG || b == Blocks.ACACIA_LOG;
