@@ -9,14 +9,9 @@ import net.minecraft.util.math.BlockPos;
 public class OverworldManager {
     public enum State {
         IDLE,
-        SCANNING_FOR_VILLAGE,
-        NAVIGATING_TO_VILLAGE,
-        HUNTING_GOLEM,
-        SCANNING_FOR_SHIPWRECK,
-        LOOTING_SHIPWRECK,
-        SCANNING_FOR_CAVES,
-        MINING_IRON,
-        TARGET_FOUND // Paused state when target is found
+        SCANNING, // Unified scanning for all targets
+        NETHER_RUSH, // Searching for Lava pools
+        TARGET_FOUND // Target identified, waiting for movement
     }
 
     private static State currentState = State.IDLE;
@@ -25,7 +20,6 @@ public class OverworldManager {
     private static BlockPos targetPos;
     private static String targetType = "";
 
-    // Throttle scanning to prevent spam (scan every 20 ticks = 1 second)
     private static int scanCooldown = 0;
     private static final int SCAN_INTERVAL = 20;
 
@@ -33,7 +27,6 @@ public class OverworldManager {
         if (!active || client.player == null)
             return;
 
-        // Throttle scanning
         if (scanCooldown > 0) {
             scanCooldown--;
             return;
@@ -42,171 +35,99 @@ public class OverworldManager {
 
         switch (currentState) {
             case IDLE:
-                startScanning(client);
+                currentState = State.SCANNING;
+                DebugLogger.log("[Ghost] Strategy Started: SCANNING...");
                 break;
 
-            case SCANNING_FOR_VILLAGE:
-                scanForVillage(client);
+            case SCANNING:
+                unifiedScan(client);
                 break;
 
-            case SCANNING_FOR_SHIPWRECK:
-                scanForShipwreck(client);
-                break;
-
-            case SCANNING_FOR_CAVES:
-                scanForCaves(client);
+            case NETHER_RUSH:
+                scanForLava(client);
                 break;
 
             case TARGET_FOUND:
-                // Stay paused - target was found, waiting for pathfinding implementation
+                // TODO: LEGS movement would initiate here
                 break;
-
-            default:
-                break;
-        }
-    }
-
-    private static void startScanning(MinecraftClient client) {
-        DebugLogger.log("OverworldManager: Starting '7 Sexy Iron' Strategy");
-
-        // Check biome to determine priority
-        String biome = WorldScanner.getCurrentBiomeType(client);
-        boolean isOcean = WorldScanner.isInOcean(client);
-
-        DebugLogger.log("[Ghost] Starting scan... (Biome: " + biome + ")");
-
-        if (isOcean) {
-            // In ocean - prioritize shipwrecks
-            DebugLogger.log("[Ghost] Ocean detected! Prioritizing shipwrecks...");
-            transition(State.SCANNING_FOR_SHIPWRECK);
-        } else {
-            // On land - prioritize villages
-            transition(State.SCANNING_FOR_VILLAGE);
-        }
-    }
-
-    private static void scanForVillage(MinecraftClient client) {
-        // Priority 1: Iron Golem (instant iron!)
-        Entity golem = WorldScanner.findIronGolem(100);
-        if (golem != null) {
-            foundTarget(client, golem, null, "IRON_GOLEM", "IRON GOLEM");
-            return;
-        }
-
-        // Priority 2: Villager (means village nearby)
-        Entity villager = WorldScanner.findVillager(100);
-        if (villager != null) {
-            foundTarget(client, villager, null, "VILLAGER", "VILLAGER");
-            return;
-        }
-
-        // Priority 3: Village indicator blocks (Bell, Hay, etc.)
-        WorldScanner.ScanResult village = WorldScanner.findVillageIndicator(80);
-        if (village != null) {
-            foundTarget(client, null, village.blockPos, village.type, village.type);
-            return;
-        }
-
-        // Nothing found - check biome before moving on
-        if (WorldScanner.isInOcean(client)) {
-            DebugLogger.log("[EYES] In ocean - checking for shipwrecks...");
-            transition(State.SCANNING_FOR_SHIPWRECK);
-        } else {
-            DebugLogger.log("[EYES] No village nearby. Checking water for shipwrecks...");
-            transition(State.SCANNING_FOR_SHIPWRECK);
-        }
-    }
-
-    private static void scanForShipwreck(MinecraftClient client) {
-        // Use smart shipwreck detection (not just chests!)
-        WorldScanner.ScanResult shipwreck = WorldScanner.findShipwreckIndicator(60);
-        if (shipwreck != null) {
-            foundTarget(client, null, shipwreck.blockPos, shipwreck.type, shipwreck.type);
-            return;
-        }
-
-        // Nothing found - move to cave scan
-        DebugLogger.log("[EYES] No shipwreck structures. Scanning for iron ore...");
-        transition(State.SCANNING_FOR_CAVES);
-    }
-
-    private static void scanForCaves(MinecraftClient client) {
-        // Look for iron ore
-        BlockPos iron = WorldScanner.findIronOre(40);
-        if (iron != null) {
-            foundTarget(client, null, iron, "IRON_ORE", "IRON ORE");
-            return;
-        }
-
-        // Nothing found anywhere - notify user
-        DebugLogger.log("[EYES] Nothing found. Move around to scan new chunks!");
-        active = false; // Stop scanning to prevent spam
-    }
-
-    private static void foundTarget(MinecraftClient client, Entity entity, BlockPos pos, String type,
-            String displayName) {
-        targetEntity = entity;
-        targetPos = pos;
-        targetType = type;
-
-        int x, y, z;
-        int distance;
-
-        if (entity != null) {
-            x = (int) entity.getX();
-            y = (int) entity.getY();
-            z = (int) entity.getZ();
-            distance = (int) Math.sqrt(entity.squaredDistanceTo(client.player));
-        } else {
-            x = pos.getX();
-            y = pos.getY();
-            z = pos.getZ();
-            distance = (int) Math.sqrt(pos.getSquaredDistance(client.player.getBlockPos()));
-        }
-
-        DebugLogger.log("FOUND: " + type + " at (" + x + ", " + y + ", " + z + ")");
-        DebugLogger.log("[EYES] " + displayName + " at (" + x + ", " + y + ", " + z + ") [" + distance
-                + " blocks]");
-
-        transition(State.TARGET_FOUND);
-    }
-
-    public static void toggle() {
-        active = !active;
-        MinecraftClient client = MinecraftClient.getInstance();
-
-        if (active) {
-            DebugLogger.log("Strategy ENABLED: 7 Sexy Iron");
-            currentState = State.IDLE; // Always reset to start fresh
-            targetEntity = null;
-            targetPos = null;
-            targetType = "";
-            scanCooldown = 0;
-            DebugLogger.log("[Ghost] 7 Sexy Iron: ON");
-        } else {
-            DebugLogger.log("Strategy DISABLED.");
-            currentState = State.IDLE;
-            DebugLogger.log("[Ghost] 7 Sexy Iron: OFF");
         }
     }
 
     /**
-     * Resume scanning after target found.
+     * Scans for everything at once, prioritizing based on SPEEDRUN efficiency.
      */
-    public static void rescan() {
-        if (currentState == State.TARGET_FOUND) {
+    private static void unifiedScan(MinecraftClient client) {
+        // Priority 1: Iron Golem (fastest iron)
+        Entity golem = WorldScanner.findIronGolem(100);
+        if (golem != null) {
+            targetFound(client, golem, null, "IRON_GOLEM");
+            return;
+        }
+
+        // Priority 2: Village (indicators / villagers)
+        WorldScanner.ScanResult village = WorldScanner.findVillage(100);
+        if (village != null) {
+            targetFound(client, null, village.blockPos, village.type);
+            return;
+        }
+
+        // Priority 3: Shipwreck (only structure-verified ones)
+        WorldScanner.ScanResult shipwreck = WorldScanner.findShipwreck(80);
+        if (shipwreck != null) {
+            targetFound(client, null, shipwreck.blockPos, shipwreck.type);
+            return;
+        }
+
+        // Priority 4: Surface Iron Ore
+        BlockPos iron = WorldScanner.findIronOre(40);
+        if (iron != null) {
+            targetFound(client, null, iron, "IRON_ORE");
+            return;
+        }
+
+        DebugLogger.log("[Ghost] Scanning... No high-value structures in range.");
+    }
+
+    /**
+     * "Nether Rush" state: Scans for Lava pools.
+     */
+    private static void scanForLava(MinecraftClient client) {
+        BlockPos lava = WorldScanner.findLavaPool(100);
+        if (lava != null) {
+            targetFound(client, null, lava, "LAVA_POOL");
+            return;
+        }
+        DebugLogger.log("[Nether] Searching for Lava Pools...");
+    }
+
+    private static void targetFound(MinecraftClient client, Entity entity, BlockPos pos, String type) {
+        targetEntity = entity;
+        targetPos = pos;
+        targetType = type;
+
+        int x = (entity != null) ? (int) entity.getX() : pos.getX();
+        int y = (entity != null) ? (int) entity.getY() : pos.getY();
+        int z = (entity != null) ? (int) entity.getZ() : pos.getZ();
+
+        DebugLogger.log("[FOUND] " + type + " at (" + x + ", " + y + ", " + z + ")");
+        currentState = State.TARGET_FOUND;
+    }
+
+    public static void toggle() {
+        active = !active;
+        if (active) {
             currentState = State.IDLE;
-            targetEntity = null;
-            targetPos = null;
-            targetType = "";
-            scanCooldown = 0;
-            active = true;
+            DebugLogger.log("[Ghost] 7 Sexy Iron: ENABLED");
+        } else {
+            active = false;
+            DebugLogger.log("[Ghost] 7 Sexy Iron: DISABLED");
         }
     }
 
-    private static void transition(State newState) {
-        DebugLogger.log("State Transition: " + currentState + " -> " + newState);
-        currentState = newState;
+    public static void startNetherRush() {
+        active = true;
+        currentState = State.NETHER_RUSH;
+        DebugLogger.log("[Ghost] Nether Rush: ENABLED");
     }
 
     public static boolean isActive() {

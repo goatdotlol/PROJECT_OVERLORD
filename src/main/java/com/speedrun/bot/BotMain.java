@@ -38,6 +38,9 @@ public class BotMain implements ClientModInitializer {
             // Strategy Execution
             com.speedrun.bot.strategy.OverworldManager.tick(client);
 
+            // Movement Execution (LEGS)
+            com.speedrun.bot.navigation.MovementManager.tick(client);
+
             while (configKey.wasPressed()) {
                 DebugLogger.log("Input: Right Shift Pressed. Opening Config.");
                 client.openScreen(new com.speedrun.bot.gui.ConfigScreen());

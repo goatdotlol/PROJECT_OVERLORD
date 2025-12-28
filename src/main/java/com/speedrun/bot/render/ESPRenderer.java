@@ -15,6 +15,8 @@ import org.lwjgl.opengl.GL11;
 
 /**
  * ESP Renderer - Draws boxes through walls to highlight targets.
+ * Fixed to use stable camera offsets to prevent "floating" with camera
+ * movement.
  */
 public class ESPRenderer {
 
@@ -29,7 +31,7 @@ public class ESPRenderer {
     }
 
     /**
-     * Called from WorldRenderMixin to draw ESP boxes.
+     * Called from WorldRenderMixin with the current view matrices.
      */
     public static void render(MatrixStack matrices, float tickDelta) {
         if (!enabled)
@@ -39,43 +41,47 @@ public class ESPRenderer {
         if (client.player == null || client.world == null)
             return;
 
-        // Get camera position
+        // Get stable camera position for this frame
         Vec3d cameraPos = client.gameRenderer.getCamera().getPos();
 
-        // Draw target from OverworldManager
+        // Target from managers
         Entity targetEntity = OverworldManager.getTargetEntity();
         BlockPos targetPos = OverworldManager.getTargetPos();
         String targetType = OverworldManager.getTargetType();
 
         if (targetEntity != null) {
-            // Draw box around entity
-            Box box = targetEntity.getBoundingBox();
+            // Predict position with tickDelta for smooth tracking
+            double x = targetEntity.prevX + (targetEntity.getX() - targetEntity.prevX) * tickDelta;
+            double y = targetEntity.prevY + (targetEntity.getY() - targetEntity.prevY) * tickDelta;
+            double z = targetEntity.prevZ + (targetEntity.getZ() - targetEntity.prevZ) * tickDelta;
+
+            Box box = targetEntity.getBoundingBox().offset(-targetEntity.getX() + x, -targetEntity.getY() + y,
+                    -targetEntity.getZ() + z);
             drawBox(matrices, box, cameraPos, getColorForType(targetType));
         } else if (targetPos != null) {
-            // Draw box around block
             Box box = new Box(targetPos);
             drawBox(matrices, box, cameraPos, getColorForType(targetType));
         }
     }
 
     private static float[] getColorForType(String type) {
-        if (type.contains("GOLEM")) {
-            return new float[] { 1.0f, 0.5f, 0.0f, 0.8f }; // Orange
-        } else if (type.contains("VILLAGER")) {
-            return new float[] { 0.0f, 1.0f, 0.0f, 0.8f }; // Green
-        } else if (type.contains("BELL") || type.contains("Village")) {
-            return new float[] { 1.0f, 1.0f, 0.0f, 0.8f }; // Yellow
-        } else if (type.contains("CHEST") || type.contains("Shipwreck")) {
-            return new float[] { 1.0f, 0.0f, 1.0f, 0.8f }; // Magenta
-        } else if (type.contains("IRON")) {
-            return new float[] { 1.0f, 1.0f, 1.0f, 0.8f }; // White
-        } else {
-            return new float[] { 0.0f, 1.0f, 1.0f, 0.8f }; // Cyan default
-        }
+        if (type.contains("GOLEM"))
+            return new float[] { 1.0f, 0.5f, 0.0f, 1.0f }; // Orange
+        if (type.contains("VILLAGER"))
+            return new float[] { 0.0f, 1.0f, 0.0f, 1.0f }; // Green
+        if (type.contains("BELL") || type.contains("VILLAGE"))
+            return new float[] { 1.0f, 1.0f, 0.0f, 1.0f }; // Yellow
+        if (type.contains("SHIPWRECK"))
+            return new float[] { 1.0f, 0.0f, 1.0f, 1.0f }; // Magenta
+        if (type.contains("IRON"))
+            return new float[] { 1.0f, 1.0f, 1.0f, 1.0f }; // White
+        if (type.contains("LAVA"))
+            return new float[] { 1.0f, 0.2f, 0.0f, 1.0f }; // Red-Orange
+        return new float[] { 0.0f, 1.0f, 1.0f, 1.0f }; // Cyan default
     }
 
     private static void drawBox(MatrixStack matrices, Box box, Vec3d cameraPos, float[] color) {
-        // Translate box relative to camera
+        // Translation relative to camera
         double x1 = box.minX - cameraPos.x;
         double y1 = box.minY - cameraPos.y;
         double z1 = box.minZ - cameraPos.z;
@@ -83,14 +89,17 @@ public class ESPRenderer {
         double y2 = box.maxY - cameraPos.y;
         double z2 = box.maxZ - cameraPos.z;
 
-        // Setup OpenGL for line rendering
         RenderSystem.disableTexture();
         RenderSystem.disableDepthTest();
         RenderSystem.enableBlend();
-        RenderSystem.lineWidth(2.0f);
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.lineWidth(2.5f);
 
         Tessellator tessellator = Tessellator.getInstance();
         BufferBuilder buffer = tessellator.getBuffer();
+
+        // Use current matrix stack translation
+        matrices.push();
 
         buffer.begin(GL11.GL_LINES, VertexFormats.POSITION_COLOR);
 
@@ -99,50 +108,35 @@ public class ESPRenderer {
         float b = color[2];
         float a = color[3];
 
-        // Bottom face
-        buffer.vertex(x1, y1, z1).color(r, g, b, a).next();
-        buffer.vertex(x2, y1, z1).color(r, g, b, a).next();
-
-        buffer.vertex(x2, y1, z1).color(r, g, b, a).next();
-        buffer.vertex(x2, y1, z2).color(r, g, b, a).next();
-
-        buffer.vertex(x2, y1, z2).color(r, g, b, a).next();
-        buffer.vertex(x1, y1, z2).color(r, g, b, a).next();
-
-        buffer.vertex(x1, y1, z2).color(r, g, b, a).next();
-        buffer.vertex(x1, y1, z1).color(r, g, b, a).next();
-
-        // Top face
-        buffer.vertex(x1, y2, z1).color(r, g, b, a).next();
-        buffer.vertex(x2, y2, z1).color(r, g, b, a).next();
-
-        buffer.vertex(x2, y2, z1).color(r, g, b, a).next();
-        buffer.vertex(x2, y2, z2).color(r, g, b, a).next();
-
-        buffer.vertex(x2, y2, z2).color(r, g, b, a).next();
-        buffer.vertex(x1, y2, z2).color(r, g, b, a).next();
-
-        buffer.vertex(x1, y2, z2).color(r, g, b, a).next();
-        buffer.vertex(x1, y2, z1).color(r, g, b, a).next();
-
-        // Vertical edges
-        buffer.vertex(x1, y1, z1).color(r, g, b, a).next();
-        buffer.vertex(x1, y2, z1).color(r, g, b, a).next();
-
-        buffer.vertex(x2, y1, z1).color(r, g, b, a).next();
-        buffer.vertex(x2, y2, z1).color(r, g, b, a).next();
-
-        buffer.vertex(x2, y1, z2).color(r, g, b, a).next();
-        buffer.vertex(x2, y2, z2).color(r, g, b, a).next();
-
-        buffer.vertex(x1, y1, z2).color(r, g, b, a).next();
-        buffer.vertex(x1, y2, z2).color(r, g, b, a).next();
+        // Draw 12 lines of the cube
+        // Bottom
+        line(buffer, x1, y1, z1, x2, y1, z1, r, g, b, a);
+        line(buffer, x2, y1, z1, x2, y1, z2, r, g, b, a);
+        line(buffer, x2, y1, z2, x1, y1, z2, r, g, b, a);
+        line(buffer, x1, y1, z2, x1, y1, z1, r, g, b, a);
+        // Top
+        line(buffer, x1, y2, z1, x2, y2, z1, r, g, b, a);
+        line(buffer, x2, y2, z1, x2, y2, z2, r, g, b, a);
+        line(buffer, x2, y2, z2, x1, y2, z2, r, g, b, a);
+        line(buffer, x1, y2, z2, x1, y2, z1, r, g, b, a);
+        // Columns
+        line(buffer, x1, y1, z1, x1, y2, z1, r, g, b, a);
+        line(buffer, x2, y1, z1, x2, y2, z1, r, g, b, a);
+        line(buffer, x2, y1, z2, x2, y2, z2, r, g, b, a);
+        line(buffer, x1, y1, z2, x1, y2, z2, r, g, b, a);
 
         tessellator.draw();
 
-        // Restore OpenGL state
+        matrices.pop();
+
         RenderSystem.enableDepthTest();
         RenderSystem.enableTexture();
         RenderSystem.disableBlend();
+    }
+
+    private static void line(BufferBuilder buffer, double x1, double y1, double z1, double x2, double y2, double z2,
+            float r, float g, float b, float a) {
+        buffer.vertex(x1, y1, z1).color(r, g, b, a).next();
+        buffer.vertex(x2, y2, z2).color(r, g, b, a).next();
     }
 }

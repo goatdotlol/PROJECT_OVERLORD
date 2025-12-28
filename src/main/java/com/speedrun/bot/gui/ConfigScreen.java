@@ -52,10 +52,11 @@ public class ConfigScreen extends Screen {
                     showStatus();
                 }));
 
-        // Button: Nether Mode (Placeholder)
+        // Button: Nether Mode
         netherButton = new ButtonWidget(centerX - 100, startY + 80, 200, 20,
-                new LiteralText("Nether Rush [NOT IMPLEMENTED]"), (button) -> {
-                    DebugLogger.log("[Ghost] Nether Rush not implemented yet!");
+                new LiteralText("Nether Rush [PROTOTYPE]"), (button) -> {
+                    OverworldManager.startNetherRush();
+                    this.client.openScreen(null); // Close GUI to start
                 });
         this.addButton(netherButton);
 

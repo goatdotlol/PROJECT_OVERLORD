@@ -14,86 +14,34 @@ import java.util.Comparator;
 
 public class WorldScanner {
 
-    // Village indicator blocks - unique to villages!
+    // Village indicator blocks
     private static final Block[] VILLAGE_INDICATORS = {
-            Blocks.BELL, // Bell is UNIQUE to villages
-            Blocks.HAY_BLOCK, // Common in villages
-            Blocks.COMPOSTER, // Farmer workstation
-            Blocks.LECTERN, // Librarian workstation
-            Blocks.CARTOGRAPHY_TABLE,
-            Blocks.SMITHING_TABLE,
-            Blocks.FLETCHING_TABLE,
-            Blocks.BREWING_STAND,
-            Blocks.BARREL,
-            Blocks.SMOKER,
-            Blocks.BLAST_FURNACE,
-            Blocks.GRINDSTONE,
-            Blocks.STONECUTTER,
-            Blocks.LOOM
+            Blocks.BELL, Blocks.HAY_BLOCK, Blocks.COMPOSTER, Blocks.LECTERN,
+            Blocks.CARTOGRAPHY_TABLE, Blocks.SMITHING_TABLE, Blocks.FLETCHING_TABLE,
+            Blocks.BREWING_STAND, Blocks.BARREL, Blocks.SMOKER, Blocks.BLAST_FURNACE,
+            Blocks.GRINDSTONE, Blocks.STONECUTTER, Blocks.LOOM
     };
 
-    // Shipwreck indicator blocks - waterlogged wood structures underwater
+    // Shipwreck indicators
     private static final Block[] SHIPWRECK_INDICATORS = {
-            // Trapdoors (all wood types used in shipwrecks)
-            Blocks.OAK_TRAPDOOR,
-            Blocks.SPRUCE_TRAPDOOR,
-            Blocks.BIRCH_TRAPDOOR,
-            Blocks.JUNGLE_TRAPDOOR,
-            Blocks.ACACIA_TRAPDOOR,
-            Blocks.DARK_OAK_TRAPDOOR,
-            // Fences (ship railings)
-            Blocks.OAK_FENCE,
-            Blocks.SPRUCE_FENCE,
-            Blocks.BIRCH_FENCE,
-            Blocks.JUNGLE_FENCE,
-            Blocks.ACACIA_FENCE,
-            Blocks.DARK_OAK_FENCE,
-            // Logs (ship hull)
-            Blocks.OAK_LOG,
-            Blocks.SPRUCE_LOG,
-            Blocks.STRIPPED_OAK_LOG,
-            Blocks.STRIPPED_SPRUCE_LOG,
-            // Planks (ship deck)
-            Blocks.OAK_PLANKS,
-            Blocks.SPRUCE_PLANKS,
-            Blocks.DARK_OAK_PLANKS
+            Blocks.OAK_TRAPDOOR, Blocks.SPRUCE_TRAPDOOR, Blocks.BIRCH_TRAPDOOR,
+            Blocks.JUNGLE_TRAPDOOR, Blocks.ACACIA_TRAPDOOR, Blocks.DARK_OAK_TRAPDOOR,
+            Blocks.OAK_FENCE, Blocks.SPRUCE_FENCE, Blocks.BIRCH_FENCE,
+            Blocks.JUNGLE_FENCE, Blocks.ACACIA_FENCE, Blocks.DARK_OAK_FENCE
     };
 
-    /**
-     * Gets current biome category for smart scanning.
-     */
     public static String getCurrentBiomeType(MinecraftClient client) {
         if (client.player == null || client.world == null)
             return "UNKNOWN";
-
-        BlockPos pos = client.player.getBlockPos();
-        Biome biome = client.world.getBiome(pos);
-        Biome.Category category = biome.getCategory();
-
-        return category.getName().toUpperCase();
+        Biome biome = client.world.getBiome(client.player.getBlockPos());
+        return biome.getCategory().getName().toUpperCase();
     }
 
-    /**
-     * Check if player is in/near ocean.
-     */
     public static boolean isInOcean(MinecraftClient client) {
         String biome = getCurrentBiomeType(client);
         return biome.contains("OCEAN") || biome.contains("BEACH") || biome.contains("RIVER");
     }
 
-    /**
-     * Check if player is in plains/forest (village territory).
-     */
-    public static boolean isInVillageTerritory(MinecraftClient client) {
-        String biome = getCurrentBiomeType(client);
-        return biome.contains("PLAINS") || biome.contains("SAVANNA") ||
-                biome.contains("DESERT") || biome.contains("TAIGA") ||
-                biome.contains("SNOWY");
-    }
-
-    /**
-     * Scans for a specific block within a radius.
-     */
     public static BlockPos findNearestBlock(Block targetBlock, int radius) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null || client.world == null)
@@ -121,122 +69,106 @@ public class WorldScanner {
     }
 
     /**
-     * Scans for ANY village indicator blocks.
+     * Finds structure with verification.
+     * A "Shipwreck" must have structure blocks (trapdoors/fences) AND be near
+     * water.
      */
-    public static ScanResult findVillageIndicator(int radius) {
+    public static ScanResult findShipwreck(int radius) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null || client.world == null)
             return null;
 
-        // Priority: Bell first (most reliable)
-        BlockPos bell = findNearestBlock(Blocks.BELL, radius);
-        if (bell != null) {
-            return new ScanResult("BELL (Village!)", bell, null);
-        }
-
-        // Then check for any village workstation
-        for (Block indicator : VILLAGE_INDICATORS) {
-            BlockPos found = findNearestBlock(indicator, radius);
-            if (found != null) {
-                String name = indicator.toString().replace("Block{", "").replace("}", "").toUpperCase();
-                return new ScanResult(name + " (Village)", found, null);
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Scans for shipwreck indicators (underwater wood structures).
-     * More reliable than just finding chests!
-     */
-    public static ScanResult findShipwreckIndicator(int radius) {
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client.player == null || client.world == null)
-            return null;
-
-        // Look for underwater wood structures (trapdoors, fences are most unique)
+        // 1. Look for structure indicators (trapdoors/fences)
         for (Block indicator : SHIPWRECK_INDICATORS) {
             BlockPos found = findNearestBlock(indicator, radius);
             if (found != null) {
-                // Verify it's underwater (shipwrecks are always underwater)
-                BlockState aboveState = client.world.getBlockState(found.up());
-                if (aboveState.getBlock() == Blocks.WATER || found.getY() < 62) {
-                    String name = indicator.toString().replace("Block{", "").replace("}", "").toUpperCase();
-                    return new ScanResult(name + " (Shipwreck?)", found, null);
+                // Verify: Is it underwater or near world bottom/water height?
+                if (found.getY() < 64) {
+                    return new ScanResult("SHIPWRECK", found, null);
                 }
             }
         }
-
-        // Fallback: chest underwater
-        BlockPos chest = findNearestBlock(Blocks.CHEST, radius);
-        if (chest != null && chest.getY() < 62) {
-            return new ScanResult("CHEST (Underwater)", chest, null);
-        }
-
         return null;
     }
 
     /**
-     * Efficiently finds nearby entities of a specific type.
+     * Finds village with verification.
      */
+    public static ScanResult findVillage(int radius) {
+        // High priority: Bell
+        BlockPos bell = findNearestBlock(Blocks.BELL, radius);
+        if (bell != null)
+            return new ScanResult("VILLAGE_BELL", bell, null);
+
+        // Low priority indicators
+        for (Block indicator : VILLAGE_INDICATORS) {
+            BlockPos found = findNearestBlock(indicator, radius);
+            if (found != null) {
+                // Verify village: check if there are multiple workstation/indicators?
+                // For now, workstations are reliable enough if not in Ocean.
+                if (!isInOcean(MinecraftClient.getInstance())) {
+                    return new ScanResult("VILLAGE_PIECE", found, null);
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Scans for Surface Lava pools (Nether entrance).
+     */
+    public static BlockPos findLavaPool(int radius) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.player == null || client.world == null)
+            return null;
+
+        BlockPos playerPos = client.player.getBlockPos();
+        for (int x = -radius; x <= radius; x++) {
+            for (int z = -radius; z <= radius; z++) {
+                for (int y = -10; y <= 20; y++) { // Check near surface
+                    BlockPos pos = playerPos.add(x, y, z);
+                    Block block = client.world.getBlockState(pos).getBlock();
+                    if (block == Blocks.LAVA) {
+                        // Check if it's a "pool" (not a one-block drip)
+                        if (client.world.getBlockState(pos.east()).getBlock() == Blocks.LAVA ||
+                                client.world.getBlockState(pos.west()).getBlock() == Blocks.LAVA) {
+                            return pos;
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
     public static List<Entity> getNearbyEntities(EntityType<?> type, double radius) {
         MinecraftClient client = MinecraftClient.getInstance();
         List<Entity> result = new ArrayList<>();
         if (client.player == null || client.world == null)
             return result;
-
         for (Entity entity : client.world.getEntities()) {
             if (entity.getType() == type && entity.squaredDistanceTo(client.player) <= radius * radius) {
                 result.add(entity);
             }
         }
-
         result.sort(Comparator.comparingDouble(e -> e.squaredDistanceTo(client.player)));
         return result;
     }
 
-    /**
-     * Find Iron Golem specifically.
-     */
     public static Entity findIronGolem(double radius) {
         List<Entity> golems = getNearbyEntities(EntityType.IRON_GOLEM, radius);
         return golems.isEmpty() ? null : golems.get(0);
     }
 
-    /**
-     * Find Villager specifically.
-     */
     public static Entity findVillager(double radius) {
         List<Entity> villagers = getNearbyEntities(EntityType.VILLAGER, radius);
         return villagers.isEmpty() ? null : villagers.get(0);
     }
 
-    /**
-     * Find Iron Ore.
-     */
     public static BlockPos findIronOre(int radius) {
         return findNearestBlock(Blocks.IRON_ORE, radius);
     }
 
-    /**
-     * Find Chest.
-     */
-    public static BlockPos findChest(int radius) {
-        return findNearestBlock(Blocks.CHEST, radius);
-    }
-
-    public static boolean isSolid(BlockPos pos) {
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client.world == null)
-            return false;
-        BlockState state = client.world.getBlockState(pos);
-        return state.getMaterial().isSolid();
-    }
-
-    /**
-     * Result holder for scans.
-     */
     public static class ScanResult {
         public final String type;
         public final BlockPos blockPos;
@@ -246,15 +178,6 @@ public class WorldScanner {
             this.type = type;
             this.blockPos = blockPos;
             this.entity = entity;
-        }
-
-        public String getCoords() {
-            if (blockPos != null) {
-                return "(" + blockPos.getX() + ", " + blockPos.getY() + ", " + blockPos.getZ() + ")";
-            } else if (entity != null) {
-                return "(" + (int) entity.getX() + ", " + (int) entity.getY() + ", " + (int) entity.getZ() + ")";
-            }
-            return "(unknown)";
         }
     }
 }
