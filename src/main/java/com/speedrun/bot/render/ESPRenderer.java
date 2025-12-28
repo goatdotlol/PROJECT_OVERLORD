@@ -2,6 +2,7 @@ package com.speedrun.bot.render;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.speedrun.bot.strategy.OverworldManager;
+import com.speedrun.bot.strategy.AutoSpeedrunManager;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.client.render.Tessellator;
@@ -14,10 +15,6 @@ import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 import org.lwjgl.opengl.GL11;
 
-/**
- * ESP Renderer - Draws boxes through walls to highlight targets.
- * Fixed to use MatrixStack properly for in-world stability.
- */
 public class ESPRenderer {
 
     private static boolean enabled = true;
@@ -39,48 +36,51 @@ public class ESPRenderer {
             return;
 
         Vec3d cameraPos = client.gameRenderer.getCamera().getPos();
-        Entity targetEntity = OverworldManager.getTargetEntity();
-        BlockPos targetPos = OverworldManager.getTargetPos();
-        String targetType = OverworldManager.getTargetType();
 
-        if (targetEntity != null) {
-            double x = targetEntity.prevX + (targetEntity.getX() - targetEntity.prevX) * tickDelta;
-            double y = targetEntity.prevY + (targetEntity.getY() - targetEntity.prevY) * tickDelta;
-            double z = targetEntity.prevZ + (targetEntity.getZ() - targetEntity.prevZ) * tickDelta;
+        // 1. Render Autonomous Target (Prioritized)
+        if (AutoSpeedrunManager.isActive()) {
+            renderTarget(matrices, AutoSpeedrunManager.getTargetEntity(), AutoSpeedrunManager.getTargetPos(),
+                    AutoSpeedrunManager.getTargetType(), cameraPos, tickDelta, true);
+        }
 
-            Box box = targetEntity.getBoundingBox().offset(-targetEntity.getX() + x, -targetEntity.getY() + y,
-                    -targetEntity.getZ() + z);
-            drawBox(matrices, box, cameraPos, getColorForType(targetType));
-        } else if (targetPos != null) {
-            Box box = new Box(targetPos);
-            drawBox(matrices, box, cameraPos, getColorForType(targetType));
+        // 2. Render Passive Scan Target
+        if (OverworldManager.isActive()) {
+            renderTarget(matrices, OverworldManager.getTargetEntity(), OverworldManager.getTargetPos(),
+                    OverworldManager.getTargetType(), cameraPos, tickDelta, false);
         }
     }
 
-    private static float[] getColorForType(String type) {
+    private static void renderTarget(MatrixStack matrices, Entity entity, BlockPos pos, String type, Vec3d cameraPos,
+            float tickDelta, boolean isAuto) {
+        if (entity != null) {
+            double x = entity.prevX + (entity.getX() - entity.prevX) * tickDelta;
+            double y = entity.prevY + (entity.getY() - entity.prevY) * tickDelta;
+            double z = entity.prevZ + (entity.getZ() - entity.prevZ) * tickDelta;
+            Box box = entity.getBoundingBox().offset(-entity.getX() + x, -entity.getY() + y, -entity.getZ() + z);
+            drawBox(matrices, box, cameraPos, getColorForType(type, isAuto));
+        } else if (pos != null) {
+            drawBox(matrices, new Box(pos), cameraPos, getColorForType(type, isAuto));
+        }
+    }
+
+    private static float[] getColorForType(String type, boolean isAuto) {
+        float alpha = isAuto ? 1.0f : 0.5f; // Active target is more solid
+        if (type.contains("WOOD"))
+            return new float[] { 0.6f, 0.4f, 0.2f, alpha }; // Brown
         if (type.contains("GOLEM"))
-            return new float[] { 1.0f, 0.5f, 0.0f, 1.0f };
+            return new float[] { 1.0f, 0.5f, 0.0f, alpha };
         if (type.contains("VILLAGER"))
-            return new float[] { 0.0f, 1.0f, 0.0f, 1.0f };
-        if (type.contains("BELL") || type.contains("VILLAGE"))
-            return new float[] { 1.0f, 1.0f, 0.0f, 1.0f };
-        if (type.contains("SHIPWRECK"))
-            return new float[] { 1.0f, 0.0f, 1.0f, 1.0f };
+            return new float[] { 0.0f, 1.0f, 0.0f, alpha };
         if (type.contains("IRON"))
-            return new float[] { 1.0f, 1.0f, 1.0f, 1.0f };
+            return new float[] { 1.0f, 1.0f, 1.0f, alpha };
         if (type.contains("LAVA"))
-            return new float[] { 1.0f, 0.2f, 0.0f, 1.0f };
-        return new float[] { 0.0f, 1.0f, 1.0f, 1.0f };
+            return new float[] { 1.0f, 0.2f, 0.0f, alpha };
+        return new float[] { 0.0f, 1.0f, 1.0f, alpha };
     }
 
     private static void drawBox(MatrixStack matrices, Box box, Vec3d cameraPos, float[] color) {
-        // Translation relative to camera
-        double x1 = box.minX - cameraPos.x;
-        double y1 = box.minY - cameraPos.y;
-        double z1 = box.minZ - cameraPos.z;
-        double x2 = box.maxX - cameraPos.x;
-        double y2 = box.maxY - cameraPos.y;
-        double z2 = box.maxZ - cameraPos.z;
+        double x1 = box.minX - cameraPos.x, y1 = box.minY - cameraPos.y, z1 = box.minZ - cameraPos.z;
+        double x2 = box.maxX - cameraPos.x, y2 = box.maxY - cameraPos.y, z2 = box.maxZ - cameraPos.z;
 
         RenderSystem.disableTexture();
         RenderSystem.disableDepthTest();
@@ -93,7 +93,6 @@ public class ESPRenderer {
         Matrix4f model = matrices.peek().getModel();
 
         buffer.begin(GL11.GL_LINES, VertexFormats.POSITION_COLOR);
-
         float r = color[0], g = color[1], b = color[2], a = color[3];
 
         // Bottom
@@ -125,7 +124,6 @@ public class ESPRenderer {
         vertex(buffer, model, x1, y2, z2, r, g, b, a);
 
         tessellator.draw();
-
         RenderSystem.enableDepthTest();
         RenderSystem.enableTexture();
         RenderSystem.disableBlend();

@@ -2,6 +2,8 @@ package com.speedrun.bot.gui;
 
 import com.speedrun.bot.utils.DebugLogger;
 import com.speedrun.bot.strategy.OverworldManager;
+import com.speedrun.bot.strategy.AutoSpeedrunManager;
+import com.speedrun.bot.utils.InventoryScanner;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.text.LiteralText;
@@ -11,10 +13,9 @@ import net.minecraft.util.math.BlockPos;
 
 public class ConfigScreen extends Screen {
 
-    private ButtonWidget overworldButton;
-    private ButtonWidget netherButton;
-    private ButtonWidget endButton;
-    private ButtonWidget scanButton;
+    private ButtonWidget passiveButton;
+    private ButtonWidget autoButton;
+    private ButtonWidget espButton;
 
     public ConfigScreen() {
         super(new LiteralText("Project OVERLORD - Ghost Engine"));
@@ -26,110 +27,71 @@ public class ConfigScreen extends Screen {
         int centerX = this.width / 2;
         int startY = this.height / 4;
 
-        // Button: 7 Sexy Iron (Overworld Strategy)
-        overworldButton = new ButtonWidget(centerX - 100, startY, 200, 20,
-                getOverworldButtonText(), (button) -> {
+        // Button: Passive Scan
+        passiveButton = new ButtonWidget(centerX - 100, startY, 200, 20,
+                getPassiveButtonText(), (button) -> {
                     OverworldManager.toggle();
-                    button.setMessage(getOverworldButtonText());
-                    this.client.openScreen(null); // Close GUI to start
+                    button.setMessage(getPassiveButtonText());
                 });
-        this.addButton(overworldButton);
+        this.addButton(passiveButton);
 
-        // Button: Rescan Now
-        scanButton = new ButtonWidget(centerX - 100, startY + 24, 200, 20,
-                new LiteralText("[SCAN NOW] Force Rescan"), (button) -> {
-                    if (!OverworldManager.isActive()) {
-                        OverworldManager.toggle(); // Enable if not active
+        // Button: Auto Speedrun (Autonomous Mode)
+        autoButton = new ButtonWidget(centerX - 100, startY + 24, 200, 20,
+                getAutoButtonText(), (button) -> {
+                    if (AutoSpeedrunManager.isActive()) {
+                        AutoSpeedrunManager.stop();
+                    } else {
+                        AutoSpeedrunManager.start();
                     }
-                    DebugLogger.log("[Ghost] Forcing rescan...");
-                    this.client.openScreen(null);
+                    button.setMessage(getAutoButtonText());
+                    this.client.openScreen(null); // Close to start
                 });
-        this.addButton(scanButton);
+        this.addButton(autoButton);
 
         // Button: Show Status
-        this.addButton(new ButtonWidget(centerX - 100, startY + 48, 200, 20,
-                new LiteralText("[STATUS] Log Current Target"), (button) -> {
+        this.addButton(new ButtonWidget(centerX - 100, startY + 54, 200, 20,
+                new LiteralText("[STATUS] Log Info to Console"), (button) -> {
                     showStatus();
                 }));
 
-        // Button: Nether Mode
-        netherButton = new ButtonWidget(centerX - 100, startY + 80, 200, 20,
-                new LiteralText("Nether Rush [PROTOTYPE]"), (button) -> {
-                    OverworldManager.startNetherRush();
-                    this.client.openScreen(null); // Close GUI to start
-                });
-        this.addButton(netherButton);
-
-        // Button: End Mode (Placeholder)
-        endButton = new ButtonWidget(centerX - 100, startY + 104, 200, 20,
-                new LiteralText("End Game [NOT IMPLEMENTED]"), (button) -> {
-                    DebugLogger.log("[Ghost] End Game not implemented yet!");
-                });
-        this.addButton(endButton);
-
         // Button: Toggle ESP
-        this.addButton(new ButtonWidget(centerX - 100, startY + 128, 200, 20,
-                new LiteralText("[ESP] Toggle Target Highlight"), (button) -> {
+        espButton = new ButtonWidget(centerX - 100, startY + 84, 200, 20,
+                new LiteralText("[ESP] Toggle Highlighting"), (button) -> {
                     com.speedrun.bot.render.ESPRenderer.toggle();
-                    boolean on = com.speedrun.bot.render.ESPRenderer.isEnabled();
-                    DebugLogger.log(on ? "[Ghost] ESP: ON" : "[Ghost] ESP: OFF");
-                }));
+                    DebugLogger.log("ESP: " + (com.speedrun.bot.render.ESPRenderer.isEnabled() ? "ON" : "OFF"));
+                });
+        this.addButton(espButton);
 
         // Close
         this.addButton(new ButtonWidget(centerX - 100, this.height - 40, 200, 20,
-                new LiteralText("[X] Close"),
-                (button) -> {
-                    this.client.openScreen(null);
-                }));
+                new LiteralText("[X] Close"), (button) -> this.client.openScreen(null)));
     }
 
-    private LiteralText getOverworldButtonText() {
-        boolean active = OverworldManager.isActive();
-        if (active) {
-            return new LiteralText("7 Sexy Iron: ON [Click to STOP]");
-        } else {
-            return new LiteralText("7 Sexy Iron: OFF [Click to START]");
-        }
+    private LiteralText getPassiveButtonText() {
+        return new LiteralText("Passive Scan: " + (OverworldManager.isActive() ? "ON" : "OFF"));
+    }
+
+    private LiteralText getAutoButtonText() {
+        return new LiteralText("Auto Speedrun: " + (AutoSpeedrunManager.isActive() ? "ENABLED" : "DISABLED"));
     }
 
     private void showStatus() {
-        if (this.client.player == null)
-            return;
-
-        String state = OverworldManager.getState().toString();
-        String targetType = OverworldManager.getTargetType();
-
         DebugLogger.log("--- Ghost Status ---");
-        DebugLogger.log("State: " + state);
-        DebugLogger.log("Active: " + (OverworldManager.isActive() ? "YES" : "NO"));
+        DebugLogger.log("Goal: " + AutoSpeedrunManager.getGoal());
+        DebugLogger.log("Iron: " + InventoryScanner.getIronCount());
+        DebugLogger.log("Wood: " + (InventoryScanner.hasWood() ? "YES" : "NO"));
 
-        if (!targetType.isEmpty()) {
-            if (OverworldManager.getTargetPos() != null) {
-                BlockPos pos = OverworldManager.getTargetPos();
-                DebugLogger.log("Target: " + targetType + " at (" + pos.getX() + ", "
-                        + pos.getY() + ", " + pos.getZ() + ")");
-            } else if (OverworldManager.getTargetEntity() != null) {
-                Entity ent = OverworldManager.getTargetEntity();
-                DebugLogger.log("Target: " + targetType + " at (" + (int) ent.getX() + ", "
-                        + (int) ent.getY() + ", " + (int) ent.getZ() + ")");
-            }
-        } else {
-            DebugLogger.log("Target: None");
-        }
+        String target = AutoSpeedrunManager.getTargetType();
+        if (target.isEmpty())
+            target = OverworldManager.getTargetType();
+        DebugLogger.log("Target: " + (target.isEmpty() ? "None" : target));
     }
 
     @Override
     public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
         this.renderBackground(matrices);
-
-        // Title
         this.drawCenteredString(matrices, this.textRenderer, "Project OVERLORD", this.width / 2, 15, 0xFFFFFF);
         this.drawCenteredString(matrices, this.textRenderer, "Ghost Engine v1.0", this.width / 2, 28, 0xAAAAAA);
-
-        // Instructions
-        this.drawCenteredString(matrices, this.textRenderer, "Press Right Shift to open this menu", this.width / 2,
-                this.height - 55, 0x888888);
-
         super.render(matrices, mouseX, mouseY, delta);
     }
 }

@@ -8,6 +8,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.biome.Biome;
+import net.minecraft.tag.BlockTags;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Comparator;
@@ -69,23 +70,46 @@ public class WorldScanner {
     }
 
     /**
+     * Finds the nearest log (tree).
+     */
+    public static BlockPos findTree(int radius) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.player == null || client.world == null)
+            return null;
+
+        BlockPos playerPos = client.player.getBlockPos();
+        BlockPos nearest = null;
+        double minDstSq = Double.MAX_VALUE;
+
+        for (int x = -radius; x <= radius; x++) {
+            for (int y = -radius; y <= radius; y++) {
+                for (int z = -radius; z <= radius; z++) {
+                    BlockPos pos = playerPos.add(x, y, z);
+                    if (client.world.getBlockState(pos).getBlock().isIn(BlockTags.LOGS)) {
+                        double dstSq = pos.getSquaredDistance(playerPos);
+                        if (dstSq < minDstSq) {
+                            minDstSq = dstSq;
+                            nearest = pos;
+                        }
+                    }
+                }
+            }
+        }
+        return nearest;
+    }
+
+    /**
      * Finds structure with verification.
-     * A "Shipwreck" must have structure blocks (trapdoors/fences) AND be near
-     * water.
      */
     public static ScanResult findShipwreck(int radius) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null || client.world == null)
             return null;
 
-        // 1. Look for structure indicators (trapdoors/fences)
         for (Block indicator : SHIPWRECK_INDICATORS) {
             BlockPos found = findNearestBlock(indicator, radius);
-            if (found != null) {
-                // Verify: Is it underwater or near world bottom/water height?
-                if (found.getY() < 64) {
-                    return new ScanResult("SHIPWRECK", found, null);
-                }
+            if (found != null && found.getY() < 64) {
+                return new ScanResult("SHIPWRECK", found, null);
             }
         }
         return null;
@@ -95,28 +119,19 @@ public class WorldScanner {
      * Finds village with verification.
      */
     public static ScanResult findVillage(int radius) {
-        // High priority: Bell
         BlockPos bell = findNearestBlock(Blocks.BELL, radius);
         if (bell != null)
             return new ScanResult("VILLAGE_BELL", bell, null);
 
-        // Low priority indicators
         for (Block indicator : VILLAGE_INDICATORS) {
             BlockPos found = findNearestBlock(indicator, radius);
-            if (found != null) {
-                // Verify village: check if there are multiple workstation/indicators?
-                // For now, workstations are reliable enough if not in Ocean.
-                if (!isInOcean(MinecraftClient.getInstance())) {
-                    return new ScanResult("VILLAGE_PIECE", found, null);
-                }
+            if (found != null && !isInOcean(MinecraftClient.getInstance())) {
+                return new ScanResult("VILLAGE_PIECE", found, null);
             }
         }
         return null;
     }
 
-    /**
-     * Scans for Surface Lava pools (Nether entrance).
-     */
     public static BlockPos findLavaPool(int radius) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null || client.world == null)
@@ -125,11 +140,10 @@ public class WorldScanner {
         BlockPos playerPos = client.player.getBlockPos();
         for (int x = -radius; x <= radius; x++) {
             for (int z = -radius; z <= radius; z++) {
-                for (int y = -10; y <= 20; y++) { // Check near surface
+                for (int y = -10; y <= 20; y++) {
                     BlockPos pos = playerPos.add(x, y, z);
                     Block block = client.world.getBlockState(pos).getBlock();
                     if (block == Blocks.LAVA) {
-                        // Check if it's a "pool" (not a one-block drip)
                         if (client.world.getBlockState(pos.east()).getBlock() == Blocks.LAVA ||
                                 client.world.getBlockState(pos.west()).getBlock() == Blocks.LAVA) {
                             return pos;
